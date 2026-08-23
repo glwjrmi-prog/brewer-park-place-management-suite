@@ -873,7 +873,7 @@ function renderSearch(){
 }
 
 document.querySelectorAll(".layerTab").forEach(t=>t.addEventListener("click",()=>setLayer(t.dataset.layer)));
-["showUnits","showZones","showGates","showHydrants","showPressure"].forEach(id=>document.getElementById(id).addEventListener("change",syncFilters));
+["showZones","showGates","showHydrants","showPressure"].forEach(id=>document.getElementById(id).addEventListener("change",syncFilters));
 searchBox.addEventListener("input",renderSearch);
 
 document.getElementById("zoomIn").addEventListener("click",()=>{zoom=Math.min(1.8,zoom+.1);stage.style.maxWidth=(1100*zoom)+"px";});
