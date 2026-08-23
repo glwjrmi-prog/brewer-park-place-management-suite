@@ -7,7 +7,7 @@
 <style>
 :root {
   --navy:#05284a; --green:#08794c; --green2:#0b9460; --border:#d7dee6;
-  --bg:#eef2f5; --text:#17222d; --muted:#657483; --blue:#146ec8;
+  --bg:#eef2f5; --text:#17222d; --muted:#657483; --blue:#146ec8; --line:#d7dee6;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
@@ -111,13 +111,12 @@ body.field-mode .map-wrap{outline:4px solid #f0b429;outline-offset:-4px} body.fi
 <header>
   <div>
     <h1>Brewer Park Place Condominiums</h1>
-    <small>Living Property Map · Field-Ready Asset Management Map v10</small>
+    <small>Living Property Map · Field-Ready Asset Management Map v1.0</small>
   </div>
   <div class="top-actions">
     <button class="btn header active layerTab" data-layer="irrigation">Irrigation</button>
     <button class="btn header layerTab" data-layer="storm">Storm Sewer</button>
     <button class="btn header layerTab" data-layer="sanitary">Sanitary Sewer</button>
-    <button class="btn header layerTab" data-layer="dashboard">Dashboard Concept</button>
     <button class="btn header" id="printBtn">Print / PDF</button>
     <button class="btn header" id="exportBtn">Export Data</button>
     <label class="btn header" style="cursor:pointer">Import Data<input id="importFile" type="file" accept=".json" hidden></label>
@@ -304,9 +303,92 @@ body.field-mode .map-wrap{outline:4px solid #f0b429;outline-offset:-4px} body.fi
   </aside>
 </div>
 
+<dialog id="fieldAssetDialog" class="field-dialog">
+  <form method="dialog" id="fieldAssetForm">
+    <div class="field-dialog-hd">
+      <div><b>What did you find here?</b><small id="fieldCoords"></small></div>
+      <button type="button" class="btn" id="closeFieldAsset">×</button>
+    </div>
+    <div class="field-dialog-bd">
+      <label>Asset type
+        <select id="fieldAssetType">
+          <option>Zone Valve</option>
+          <option>Gate / Isolation Valve</option>
+          <option>Hydrant</option>
+          <option>Pressure Riser</option>
+          <option>Manhole</option>
+          <option>Main Shut-Off Valve</option>
+          <option>Irrigation Controller</option>
+          <option>Water Meter / Backflow Assembly</option>
+          <option>Storm Catch Basin / Inlet</option>
+          <option>Storm Manhole / Structure</option>
+          <option>Storm Outlet / Discharge</option>
+          <option>Sanitary Manhole / Cleanout</option>
+          <option>Exterior / Site Light</option>
+          <option>Mailbox / Cluster Box</option>
+          <option>Traffic / Property Sign</option>
+          <option>Road / Drive / Parking Surface</option>
+          <option>Sidewalk / Concrete</option>
+          <option>Drainage Swale / Culvert</option>
+          <option>Retaining Wall / Landscape Structure</option>
+          <option>Tree / Landscape Asset</option>
+          <option>Building Exterior Component</option>
+          <option>Other Field Asset</option>
+        </select>
+      </label>
+      <label>Label / identifier
+        <input id="fieldAssetLabel" placeholder="Example: Light 4, MH-2, Valve 47">
+      </label>
+      <label>Location note
+        <input id="fieldAssetLocation" placeholder="Example: east of Unit 74">
+      </label>
+      <label>Condition
+        <select id="fieldAssetCondition"><option>Normal</option><option>Watch</option><option>Needs Attention</option><option>Out of Service</option></select>
+      </label>
+      <label class="wide-field">Field notes
+        <textarea id="fieldAssetNotes" placeholder="Access details, what it serves, measurements, observations…"></textarea>
+      </label>
+    </div>
+    <div class="field-dialog-actions">
+      <button type="button" class="btn" id="cancelFieldAsset">Cancel</button>
+      <button type="submit" class="btn primary">Save Field Asset</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="securityDialog" class="field-dialog security-dialog">
+  <form method="dialog" id="securityForm">
+    <div class="field-dialog-hd">
+      <div><b>Access & Security</b><small>User roles and privilege plan</small></div>
+      <button type="button" class="btn" id="closeSecurity">×</button>
+    </div>
+    <div class="security-note"><b>Important:</b> this screen defines the permission model. True sign-in and server enforcement will activate when the shared backend is connected. Until then, data remains local to this browser.</div>
+    <div class="field-dialog-bd">
+      <label>Name<input id="securityName" placeholder="User name"></label>
+      <label>Email<input id="securityEmail" type="email" placeholder="name@example.com"></label>
+      <label>Role<select id="securityRole"><option>Editor / Contractor</option><option>Viewer</option><option>Administrator</option></select></label>
+      <div class="wide-field permissions-grid">
+        <label><input type="checkbox" data-perm="addAssets" checked> Add assets</label>
+        <label><input type="checkbox" data-perm="editAssets" checked> Edit assets</label>
+        <label><input type="checkbox" data-perm="fieldVerify" checked> Field verify / move locations</label>
+        <label><input type="checkbox" data-perm="maintenance" checked> Maintenance & service records</label>
+        <label><input type="checkbox" data-perm="workOrders" checked> Work orders</label>
+        <label><input type="checkbox" data-perm="photosNotes" checked> Photos / notes</label>
+        <label><input type="checkbox" data-perm="exportData"> Export data</label>
+        <label><input type="checkbox" data-perm="importData"> Import data</label>
+        <label><input type="checkbox" data-perm="deleteAssets"> Delete assets</label>
+      </div>
+    </div>
+    <div class="field-dialog-actions">
+      <button type="button" class="btn" id="cancelSecurity">Cancel</button>
+      <button type="submit" class="btn primary">Save User</button>
+    </div>
+    <div class="security-users" id="securityUsers"></div>
+  </form>
+</dialog>
+
 <script>
 const images = {
-  "dashboard": "assets/dashboard.png",
   "irrigation": "assets/irrigation.jpg",
   "storm": "assets/storm.jpg",
   "sanitary": "assets/sanitary.jpg"
@@ -467,7 +549,7 @@ function displayAssetId(item){
   return item.cat==="unit" ? item.id : `${m.prefix||item.cat.toUpperCase()}-${n}`;
 }
 function renderAssetRegister(){
-  const order=["pressure","zone","gate","hydrant","unit"];
+  const order=["pressure","zone","gate","hydrant","manhole","controller","mainshutoff","unit","field"].filter(cat=>items.some(x=>x.cat===cat));
   assetRegister.innerHTML=order.map(cat=>{
     const meta=assetTypeMeta[cat], count=items.filter(x=>x.cat===cat).length;
     return `<button class="result" data-cat-filter="${cat}" style="width:100%;text-align:left;margin-bottom:5px"><b>${meta.symbol?meta.symbol+" · ":""}${meta.name}</b><small>${count} mapped · ${meta.purpose}</small></button>`;
@@ -827,18 +909,47 @@ document.getElementById("addDoc").addEventListener("click",()=>{
   saveStore(); renderDocs(); renderAssetSummary(); renderTimeline();
 });
 
-function nextFieldAssetId(type){
-  const prefix=({"Irrigation Controller":"IC","Water Meter / Backflow Assembly":"WB","Storm Catch Basin / Inlet":"CB","Storm Manhole / Structure":"SM","Storm Outlet / Discharge":"SO","Sanitary Manhole / Cleanout":"SAN","Exterior / Site Light":"LT","Mailbox / Cluster Box":"MB","Traffic / Property Sign":"SG","Road / Drive / Parking Surface":"PV","Sidewalk / Concrete":"SW","Drainage Swale / Culvert":"DR","Retaining Wall / Landscape Structure":"RW","Tree / Landscape Asset":"TR","Building Exterior Component":"BE","Other Field Asset":"FA"})[type]||"FA";
-  let n=1; while(items.some(i=>i.assetId===`${prefix}-${String(n).padStart(2,"0")}`)) n++; return `${prefix}-${String(n).padStart(2,"0")}`;
+function fieldTypeConfig(type){
+  const map={
+    "Zone Valve":{prefix:"ZV",marker:"V",cat:"zone",system:"Irrigation"},
+    "Gate / Isolation Valve":{prefix:"GV",marker:"G",cat:"gate",system:"Irrigation"},
+    "Hydrant":{prefix:"HY",marker:"H",cat:"hydrant",system:"Irrigation"},
+    "Pressure Riser":{prefix:"PR",marker:"R",cat:"pressure",system:"Irrigation"},
+    "Manhole":{prefix:"MH",marker:"MH",cat:"manhole",system:"Site Infrastructure"},
+    "Main Shut-Off Valve":{prefix:"MS",marker:"S",cat:"mainshutoff",system:"Irrigation"},
+    "Irrigation Controller":{prefix:"IC",marker:"C",cat:"controller",system:"Irrigation"},
+    "Water Meter / Backflow Assembly":{prefix:"WB",marker:"M",cat:"field",system:"Irrigation"},
+    "Storm Catch Basin / Inlet":{prefix:"CB",marker:"D",cat:"field",system:"Storm Sewer"},
+    "Storm Manhole / Structure":{prefix:"SM",marker:"S",cat:"field",system:"Storm Sewer"},
+    "Storm Outlet / Discharge":{prefix:"SO",marker:"O",cat:"field",system:"Storm Sewer"},
+    "Sanitary Manhole / Cleanout":{prefix:"SAN",marker:"S",cat:"field",system:"Sanitary Sewer"},
+    "Exterior / Site Light":{prefix:"LT",marker:"L",cat:"field",system:"Property"},
+    "Mailbox / Cluster Box":{prefix:"MB",marker:"B",cat:"field",system:"Property"},
+    "Traffic / Property Sign":{prefix:"SG",marker:"S",cat:"field",system:"Property"},
+    "Road / Drive / Parking Surface":{prefix:"PV",marker:"P",cat:"field",system:"Property"},
+    "Sidewalk / Concrete":{prefix:"SW",marker:"W",cat:"field",system:"Property"},
+    "Drainage Swale / Culvert":{prefix:"DR",marker:"D",cat:"field",system:"Drainage"},
+    "Retaining Wall / Landscape Structure":{prefix:"RW",marker:"R",cat:"field",system:"Property"},
+    "Tree / Landscape Asset":{prefix:"TR",marker:"T",cat:"field",system:"Landscape"},
+    "Building Exterior Component":{prefix:"BE",marker:"B",cat:"field",system:"Building"},
+    "Other Field Asset":{prefix:"FA",marker:"A",cat:"field",system:"Property"}
+  };
+  return map[type]||map["Other Field Asset"];
 }
-function markerForType(type){return ({"Irrigation Controller":"C","Water Meter / Backflow Assembly":"M","Storm Catch Basin / Inlet":"D","Storm Manhole / Structure":"S","Storm Outlet / Discharge":"O","Sanitary Manhole / Cleanout":"S","Exterior / Site Light":"L","Mailbox / Cluster Box":"B","Traffic / Property Sign":"S","Road / Drive / Parking Surface":"P","Sidewalk / Concrete":"W","Drainage Swale / Culvert":"D","Retaining Wall / Landscape Structure":"R","Tree / Landscape Asset":"T","Building Exterior Component":"B","Other Field Asset":"A"})[type]||"A"}
+function nextFieldAssetId(type){
+  const prefix=fieldTypeConfig(type).prefix;
+  let n=1;
+  while(items.some(i=>i.assetId===`${prefix}-${String(n).padStart(2,"0")}`)) n++;
+  return `${prefix}-${String(n).padStart(2,"0")}`;
+}
+function markerForType(type){return fieldTypeConfig(type).marker}
 function cancelPlacement(){placementPending=false;document.body.classList.remove("placement-on");cancelPlaceBtn.style.display="none";placementMsg.style.display="none";}
 let fieldMode=false,movingSelectedAsset=false;
 function fieldMessage(msg){const el=document.getElementById("fieldModeMsg");el.textContent=msg;el.style.display="block";}
-document.getElementById("fieldModeToggle").addEventListener("click",()=>{fieldMode=!fieldMode;document.body.classList.toggle("field-mode",fieldMode);document.getElementById("fieldModePanel").style.display=fieldMode?"block":"none";document.getElementById("fieldModeToggle").textContent=fieldMode?"Exit Field Mode":"Enter Field Mode";if(fieldMode)fieldMessage("Select a mapped asset to verify it, correct its position, or add a newly found asset.");else movingSelectedAsset=false;});
-document.getElementById("verifySelectedToday").addEventListener("click",()=>{if(!selectedId){fieldMessage("Select an asset first.");return;}store.verification[selectedId]="Field Verified";store.verifiedDate[selectedId]=new Date().toISOString().slice(0,10);saveStore();renderDetails();renderHotspots();renderMappingQueue();fieldMessage(`${displayAssetId(itemById(selectedId))} marked Field Verified today.`);});
+document.getElementById("fieldModeToggle").addEventListener("click",()=>{fieldMode=!fieldMode;document.body.classList.toggle("field-mode",fieldMode);document.getElementById("fieldModePanel").style.display=fieldMode?"block":"none";document.getElementById("fieldModeToggle").textContent=fieldMode?"Exit Field Mode":"Enter Field Mode";if(fieldMode)fieldMessage("Tap a blank map location to add a new asset, or select an existing asset to verify or reposition it.");else movingSelectedAsset=false;});
+document.getElementById("verifySelectedToday").addEventListener("click",()=>{if(!selectedId){fieldMessage("Select an asset first.");return;}store.verification[selectedId]="Field Verified";store.verifiedDate[selectedId]=new Date().toISOString().slice(0,10);saveStore();selectItem(selectedId);renderMappingQueue();fieldMessage(`${displayAssetId(itemById(selectedId))} marked Field Verified today.`);});
 document.getElementById("moveSelectedAsset").addEventListener("click",()=>{if(!selectedId){fieldMessage("Select the asset you physically located first.");return;}movingSelectedAsset=true;fieldMessage("Click the corrected physical location on the map.");});
-stage.addEventListener("click",(e)=>{if(!fieldMode||!movingSelectedAsset||!selectedId||e.target.closest(".hotspot"))return;const rect=stage.getBoundingClientRect(),item=itemById(selectedId);item.x=Math.max(0,Math.min(100,((e.clientX-rect.left)/rect.width)*100));item.y=Math.max(0,Math.min(100,((e.clientY-rect.top)/rect.height)*100));store.verification[selectedId]="Field Verified";store.verifiedDate[selectedId]=new Date().toISOString().slice(0,10);store.profiles[selectedId]=store.profiles[selectedId]||{};store.profiles[selectedId].fieldLocated=true;store.profiles[selectedId].fieldLocatedAt=new Date().toISOString();saveStore();movingSelectedAsset=false;renderHotspots();renderDetails();renderMappingQueue();fieldMessage(`${displayAssetId(item)} location corrected and Field Verified.`);e.stopPropagation();},true);
+stage.addEventListener("click",(e)=>{if(!fieldMode||!movingSelectedAsset||!selectedId||e.target.closest(".hotspot"))return;const rect=stage.getBoundingClientRect(),item=itemById(selectedId);item.x=Math.max(0,Math.min(100,((e.clientX-rect.left)/rect.width)*100));item.y=Math.max(0,Math.min(100,((e.clientY-rect.top)/rect.height)*100));store.verification[selectedId]="Field Verified";store.verifiedDate[selectedId]=new Date().toISOString().slice(0,10);store.profiles[selectedId]=store.profiles[selectedId]||{};store.profiles[selectedId].fieldLocated=true;store.profiles[selectedId].fieldLocatedAt=new Date().toISOString();saveStore();movingSelectedAsset=false;selectItem(selectedId);renderMappingQueue();fieldMessage(`${displayAssetId(item)} location corrected and Field Verified.`);e.stopPropagation();},true);
 
 let fieldClickPoint=null;
 const fieldAssetDialog=document.getElementById("fieldAssetDialog");
@@ -867,11 +978,12 @@ fieldAssetForm.addEventListener("submit",ev=>{
   const type=fieldAssetType.value;
   const assetId=nextFieldAssetId(type);
   const label=fieldAssetLabel.value.trim() || assetId;
-  const item={id:`CUSTOM_${Date.now()}`,assetId,label,type,cat:"field",marker:markerForType(type),
+  const cfg=fieldTypeConfig(type);
+  const item={id:`CUSTOM_${Date.now()}`,assetId,label,type,cat:cfg.cat,marker:cfg.marker,
     x:fieldClickPoint.x,y:fieldClickPoint.y,
     location:fieldAssetLocation.value.trim()||"Field-mapped location",
     measurements:"Field verified / added in Field Mode",
-    system:fieldClickPoint.layer==="storm"?"Storm Sewer":fieldClickPoint.layer==="sanitary"?"Sanitary Sewer":fieldClickPoint.layer==="irrigation"?"Irrigation":"Property",
+    system:fieldClickPoint.layer==="storm"?"Storm Sewer":fieldClickPoint.layer==="sanitary"?"Sanitary Sewer":cfg.system,
     layer:fieldClickPoint.layer,source:"Field mapped in Living Property Map"};
   store.customItems.push(item); items.push(item);
   store.verification[item.id]="Field Verified";
@@ -934,7 +1046,7 @@ cancelPlaceBtn.addEventListener("click",cancelPlacement);
 stage.addEventListener("click",ev=>{
   if(!placementPending) return; if(ev.target.closest && ev.target.closest('.hotspot')) return;
   const rect=mapImage.getBoundingClientRect(); const x=((ev.clientX-rect.left)/rect.width)*100, y=((ev.clientY-rect.top)/rect.height)*100; if(x<0||x>100||y<0||y>100)return;
-  const type=newAssetType.value, assetId=nextFieldAssetId(type); const item={id:`CUSTOM_${Date.now()}`,assetId,label:newAssetLabel.value.trim(),type,cat:"field",marker:markerForType(type),x:+x.toFixed(2),y:+y.toFixed(2),location:newAssetLocation.value.trim()||"Field mapped location",measurements:"Field verified / added by map user",system:currentLayer==="storm"?"Storm Sewer":currentLayer==="sanitary"?"Sanitary Sewer":currentLayer==="irrigation"?"Irrigation":"Property",layer:currentLayer,source:"Field mapped in Living Property Map"};
+  const type=newAssetType.value, assetId=nextFieldAssetId(type), cfg=fieldTypeConfig(type); const item={id:`CUSTOM_${Date.now()}`,assetId,label:newAssetLabel.value.trim(),type,cat:cfg.cat,marker:cfg.marker,x:+x.toFixed(2),y:+y.toFixed(2),location:newAssetLocation.value.trim()||"Field mapped location",measurements:"Field verified / added by map user",system:currentLayer==="storm"?"Storm Sewer":currentLayer==="sanitary"?"Sanitary Sewer":cfg.system,layer:currentLayer,source:"Field mapped in Living Property Map"};
   store.customItems.push(item);items.push(item);store.verification[item.id]="Field Verified";store.verifiedDate[item.id]=todayStamp();addActivity(item.id,"Asset Created",`${assetId} added to ${currentLayer} map`,todayStamp());saveStore();newAssetLabel.value="";newAssetLocation.value="";cancelPlacement();renderMappingQueue();renderSearch();renderHotspots();selectItem(item.id);
 });
 
@@ -961,90 +1073,6 @@ document.getElementById("importFile").addEventListener("change",ev=>{
 mapImage.src=images.irrigation;
 renderHotspots(); renderSearch(); renderMappingQueue(); selectItem("Z23"); updateCounters();
 </script>
-
-<dialog id="fieldAssetDialog" class="field-dialog">
-  <form method="dialog" id="fieldAssetForm">
-    <div class="field-dialog-hd">
-      <div><b>What did you find here?</b><small id="fieldCoords"></small></div>
-      <button type="button" class="btn" id="closeFieldAsset">×</button>
-    </div>
-    <div class="field-dialog-bd">
-      <label>Asset type
-        <select id="fieldAssetType">
-          <option>Zone Valve</option>
-          <option>Gate / Isolation Valve</option>
-          <option>Hydrant</option>
-          <option>Pressure Riser</option>
-          <option>Manhole</option>
-          <option>Main Shut-Off Valve</option>
-          <option>Irrigation Controller</option>
-          <option>Water Meter / Backflow Assembly</option>
-          <option>Storm Catch Basin / Inlet</option>
-          <option>Storm Manhole / Structure</option>
-          <option>Storm Outlet / Discharge</option>
-          <option>Sanitary Manhole / Cleanout</option>
-          <option>Exterior / Site Light</option>
-          <option>Mailbox / Cluster Box</option>
-          <option>Traffic / Property Sign</option>
-          <option>Road / Drive / Parking Surface</option>
-          <option>Sidewalk / Concrete</option>
-          <option>Drainage Swale / Culvert</option>
-          <option>Retaining Wall / Landscape Structure</option>
-          <option>Tree / Landscape Asset</option>
-          <option>Building Exterior Component</option>
-          <option>Other Field Asset</option>
-        </select>
-      </label>
-      <label>Label / identifier
-        <input id="fieldAssetLabel" placeholder="Example: Light 4, MH-2, Valve 47">
-      </label>
-      <label>Location note
-        <input id="fieldAssetLocation" placeholder="Example: east of Unit 74">
-      </label>
-      <label>Condition
-        <select id="fieldAssetCondition"><option>Normal</option><option>Watch</option><option>Needs Attention</option><option>Out of Service</option></select>
-      </label>
-      <label class="wide-field">Field notes
-        <textarea id="fieldAssetNotes" placeholder="Access details, what it serves, measurements, observations…"></textarea>
-      </label>
-    </div>
-    <div class="field-dialog-actions">
-      <button type="button" class="btn" id="cancelFieldAsset">Cancel</button>
-      <button type="submit" class="btn primary">Save Field Asset</button>
-    </div>
-  </form>
-</dialog>
-
-<dialog id="securityDialog" class="field-dialog security-dialog">
-  <form method="dialog" id="securityForm">
-    <div class="field-dialog-hd">
-      <div><b>Access & Security</b><small>User roles and privilege plan</small></div>
-      <button type="button" class="btn" id="closeSecurity">×</button>
-    </div>
-    <div class="security-note"><b>Important:</b> this screen defines the permission model. True sign-in and server enforcement will activate when the shared backend is connected. Until then, data remains local to this browser.</div>
-    <div class="field-dialog-bd">
-      <label>Name<input id="securityName" placeholder="User name"></label>
-      <label>Email<input id="securityEmail" type="email" placeholder="name@example.com"></label>
-      <label>Role<select id="securityRole"><option>Editor / Contractor</option><option>Viewer</option><option>Administrator</option></select></label>
-      <div class="wide-field permissions-grid">
-        <label><input type="checkbox" data-perm="addAssets" checked> Add assets</label>
-        <label><input type="checkbox" data-perm="editAssets" checked> Edit assets</label>
-        <label><input type="checkbox" data-perm="fieldVerify" checked> Field verify / move locations</label>
-        <label><input type="checkbox" data-perm="maintenance" checked> Maintenance & service records</label>
-        <label><input type="checkbox" data-perm="workOrders" checked> Work orders</label>
-        <label><input type="checkbox" data-perm="photosNotes" checked> Photos / notes</label>
-        <label><input type="checkbox" data-perm="exportData"> Export data</label>
-        <label><input type="checkbox" data-perm="importData"> Import data</label>
-        <label><input type="checkbox" data-perm="deleteAssets"> Delete assets</label>
-      </div>
-    </div>
-    <div class="field-dialog-actions">
-      <button type="button" class="btn" id="cancelSecurity">Cancel</button>
-      <button type="submit" class="btn primary">Save User</button>
-    </div>
-    <div class="security-users" id="securityUsers"></div>
-  </form>
-</dialog>
 
 </body>
 </html>
