@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brewer Park Place — Living Property Map</title>
+<style>
+:root {
+  --navy:#05284a; --green:#08794c; --green2:#0b9460; --border:#d7dee6;
+  --bg:#eef2f5; --text:#17222d; --muted:#657483; --blue:#146ec8;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(90deg,var(--navy),#001a33);color:white;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+header h1{margin:0;font-size:23px} header small{display:block;color:#5ee0b8;font-size:14px;font-weight:700;margin-top:3px}
+.top-actions{display:flex;gap:7px;flex-wrap:wrap}
+.btn{border:1px solid #c8d2dc;background:white;color:#17314b;border-radius:7px;padding:9px 11px;cursor:pointer;font-weight:700}
+.btn:hover{background:#f5f8fb}
+.btn.primary{background:var(--green);color:white;border-color:var(--green)}
+.btn.header{background:rgba(255,255,255,.06);color:white;border-color:rgba(255,255,255,.35)}
+.btn.header.active{background:white;color:var(--navy)}
+.shell{display:grid;grid-template-columns:235px minmax(0,1fr) 325px;min-height:calc(100vh - 72px)}
+.side,.details{background:white;padding:13px;border-right:1px solid var(--border);overflow:auto}
+.details{border-right:0;border-left:1px solid var(--border)}
+.section-title{font-size:12px;font-weight:800;letter-spacing:.06em;color:#354454;margin:4px 0 9px}
+.card{background:white;border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:12px}
+.card-hd{font-size:12px;font-weight:800;padding:9px 11px;background:#f4f7f8;border-bottom:1px solid var(--border);color:#286046}
+.card-bd{padding:11px}
+.check{display:flex;gap:8px;align-items:center;margin:9px 0;font-size:14px}
+.search{width:100%;padding:10px;border:1px solid #cfd7df;border-radius:7px;font-size:14px}
+.result-list{margin-top:8px;display:grid;gap:6px;max-height:220px;overflow:auto}
+.result{border:1px solid #d8e0e7;background:#fff;border-radius:7px;padding:8px;text-align:left;cursor:pointer}
+.result:hover{background:#f5f9fc}
+.result b{display:block;font-size:13px} .result span{font-size:12px;color:var(--muted)}
+.zoomrow{display:flex;gap:6px} .zoomrow .btn{flex:1;padding:8px}
+.map-wrap{overflow:auto;padding:12px;background:#dfe5e9}
+.notice{display:none;margin-bottom:9px;padding:9px 10px;background:#fff7d8;border:1px solid #ebd783;border-radius:7px;font-size:13px}
+.stage{position:relative;margin:auto;width:100%;max-width:1100px;background:white;box-shadow:0 1px 5px rgba(0,0,0,.16)}
+.stage img{width:100%;display:block;user-select:none}
+.hotspot{position:absolute;transform:translate(-50%,-50%);border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:800}
+.hotspot.zone{width:29px;height:29px;border-radius:50%;background:#0a8c51;color:#fff;font-size:12px}
+.hotspot.gate{width:25px;height:25px;border-radius:6px;background:#d33c3c;color:#fff;font-size:11px}
+.hotspot.hydrant{width:26px;height:26px;border-radius:50%;background:#1687e0;color:#fff;font-size:11px}.hotspot.field{width:25px;height:25px;border-radius:50%;background:#b06b00;color:#fff;font-size:10px}.placement-on .stage{outline:4px solid #d99a2b;cursor:crosshair}.placement-note{background:#fff4d6;border:1px solid #e2bf66;border-radius:6px;padding:7px;font-size:11px;color:#715000;margin-top:7px}
+.hotspot.pressure{width:34px;height:34px;border-radius:50%;background:#8c39c7;color:#fff;font-size:16px;line-height:1;text-align:center}
+.hotspot.unit{min-width:31px;height:23px;border-radius:6px;background:#fff;color:#1d2a35;border:2px solid #81909e;font-size:11px;padding:0 4px}
+.hotspot.selected{outline:4px solid rgba(255,190,0,.75);outline-offset:2px}
+/* Zone-valve decluttering only: overlapping zone labels fan out on hover and remain open until the pointer leaves the expanded cluster. */
+.hotspot.clustered{transition:transform .20s ease,box-shadow .20s ease;z-index:5}
+.hotspot.cluster-expanded{transform:translate(calc(-50% + var(--scatter-x,0px)),calc(-50% + var(--scatter-y,0px)));z-index:40}
+.hotspot.cluster-expanded::after{content:"";position:absolute;width:1px;height:1px;left:50%;top:50%;box-shadow:0 0 0 1px rgba(34,55,69,.22)}
+
+.hotspot[hidden]{display:none}
+.detail-title{font-size:21px;font-weight:800;color:var(--green);margin:0 0 12px}
+.kv{display:grid;grid-template-columns:92px 1fr;gap:8px 10px;font-size:13px;line-height:1.35}
+.kv b{color:#283541}
+textarea,input[type=text],input[type=date],select{width:100%;padding:9px;border:1px solid #cfd7df;border-radius:7px;font:inherit}
+textarea{min-height:86px;resize:vertical}
+.record{border-top:1px solid #e3e8ed;padding:9px 0;font-size:13px}
+.record:first-child{border-top:0;padding-top:0}
+.record small{display:block;color:var(--muted);margin-top:3px}
+.timeline-row{border-left:3px solid #81909e;padding:7px 9px;margin:7px 0;background:#f8fafb;border-radius:0 6px 6px 0}.timeline-row b{display:block}.timeline-row small{display:block;color:var(--muted);margin-top:3px}.asset-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.asset-summary div{background:#f4f7f8;border:1px solid var(--line);border-radius:6px;padding:7px;text-align:center}.asset-summary strong{display:block;font-size:16px}.asset-summary span{font-size:10px;color:var(--muted)}
+.row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.row > *{min-width:0}
+.muted{color:var(--muted);font-size:12px;line-height:1.4}
+.badge{display:inline-block;background:#eaf5ef;color:#176643;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800}
+#savedMsg{font-size:12px;color:var(--green);min-height:16px;margin-top:5px}
+.legend{font-size:13px;line-height:1.9}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:7px;vertical-align:-2px}
+@media(max-width:980px){
+ .shell{grid-template-columns:1fr}
+ .side,.details{border:0;border-bottom:1px solid var(--border)}
+}
+@media print{
+ header,.side,.details{display:none!important}
+ .shell{display:block} .map-wrap{padding:0;background:white} .stage{max-width:none;box-shadow:none}
+}
+
+.hotspot[data-status="Watch"]{box-shadow:0 0 0 3px #f0b429,0 1px 4px #0005}
+.hotspot[data-status="Needs Attention"]{box-shadow:0 0 0 4px #e67e22,0 1px 4px #0005}
+.hotspot[data-status="Out of Service"]{box-shadow:0 0 0 4px #b42318,0 1px 4px #0005;opacity:.78}
+
+.asset-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.asset-grid label{display:block;font-size:10px;color:var(--muted);margin-bottom:3px}.asset-grid input,.asset-grid select,.asset-grid textarea{width:100%}.asset-grid .span2{grid-column:1/-1}.relation{border:1px solid var(--line);border-radius:6px;padding:7px;margin:6px 0;background:#f8fafb}.relation b{display:block}.relation small{color:var(--muted)}.queue-row{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding:5px 0}.queue-row:last-child{border-bottom:0}.queue-row span{font-size:11px}.queue-row em{font-style:normal;font-size:10px;color:#8a5a00;background:#fff4d6;padding:2px 5px;border-radius:10px}.criticality{display:inline-block;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;background:#edf2f5}.status-mini{font-size:10px;color:var(--muted)}
+
+.hotspot.controller,.hotspot.mainshutoff{
+  width:24px;height:24px;min-width:24px;font-size:12px;
+  border-radius:5px;
+}
+body.field-mode .map-wrap{outline:4px solid #f0b429;outline-offset:-4px} body.field-mode .field-mode-card{border:2px solid #f0b429}.field-banner{background:#fff5d6;border:1px solid #e2b94f;border-radius:7px;padding:8px;color:#604b12;font-size:12px} body.field-mode #stage{cursor:crosshair}
+.legacy-placement{display:none}
+.progress-row{padding:7px 0;border-bottom:1px solid #e4ece8}.progress-row:last-child{border-bottom:0}
+.progress-head{display:flex;justify-content:space-between;gap:8px;font-size:12px}.progress-head span{color:#64756c}
+.progress-track{height:7px;background:#e7eeea;border-radius:99px;overflow:hidden;margin-top:5px}.progress-track i{display:block;height:100%;background:#0a8c51}
+.field-dialog{border:0;border-radius:14px;padding:0;width:min(620px,94vw);box-shadow:0 25px 80px rgba(0,0,0,.28)}
+.field-dialog::backdrop{background:rgba(0,0,0,.38)}
+.field-dialog-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #d8e2dd}
+.field-dialog-hd b{font-size:18px}.field-dialog-hd small{display:block;color:#64756c;margin-top:3px}
+.field-dialog-bd{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-dialog-bd label{font-size:12px;font-weight:800;color:#3c5147;display:grid;gap:5px}
+.field-dialog-bd input,.field-dialog-bd select,.field-dialog-bd textarea{width:100%;border:1px solid #cfdad4;border-radius:8px;padding:10px;font:inherit;background:#fff}
+.field-dialog-bd textarea{min-height:80px;resize:vertical}.wide-field{grid-column:1/-1}
+.field-dialog-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #d8e2dd}
+.security-note{margin:12px 16px 0;padding:10px;background:#fff7df;border:1px solid #eed89a;border-radius:8px;font-size:12px;color:#624d16}
+.permissions-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:10px;border:1px solid #d8e2dd;border-radius:9px;background:#f8fbf9}
+.permissions-grid label{display:flex;align-items:center;gap:7px;font-weight:650}.permissions-grid input{width:auto}
+.security-users{padding:0 16px 16px}.security-user{padding:8px;border:1px solid #d8e2dd;border-radius:8px;margin-top:7px;font-size:12px}.security-user b{display:block}
+@media(max-width:650px){.field-dialog-bd{grid-template-columns:1fr}.wide-field{grid-column:auto}.permissions-grid{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Brewer Park Place Condominiums</h1>
+    <small>Living Property Map · Field-Ready Asset Management Map v10</small>
+  </div>
+  <div class="top-actions">
+    <button class="btn header active layerTab" data-layer="irrigation">Irrigation</button>
+    <button class="btn header layerTab" data-layer="storm">Storm Sewer</button>
+    <button class="btn header layerTab" data-layer="sanitary">Sanitary Sewer</button>
+    <button class="btn header layerTab" data-layer="dashboard">Dashboard Concept</button>
+    <button class="btn header" id="printBtn">Print / PDF</button>
+    <button class="btn header" id="exportBtn">Export Data</button>
+    <label class="btn header" style="cursor:pointer">Import Data<input id="importFile" type="file" accept=".json" hidden></label>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="side">
+    <div class="section-title">PROPERTY AT A GLANCE</div>
+<div class="card"><div class="card-bd"><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;text-align:center">
+<div style="background:#f3f7f9;border-radius:7px;padding:8px"><b id="assetCount" style="font-size:20px;color:#08794c">0</b><div class="muted">Mapped items</div></div>
+<div style="background:#f3f7f9;border-radius:7px;padding:8px"><b id="recordCount" style="font-size:20px;color:#08794c">0</b><div class="muted">Records</div></div>
+</div></div></div>
+<div class="section-title">FIELD MODE</div><div class="card field-mode-card"><div class="card-bd">
+<button class="btn primary" id="fieldModeToggle" style="width:100%">Enter Field Mode</button>
+<div id="fieldModePanel" style="display:none;margin-top:8px"><div class="field-banner"><b>FIELD MODE ACTIVE</b><br><b>New asset:</b> tap its location on the map first. <b>Existing asset:</b> select it to verify or correct its location.</div>
+<button class="btn" id="verifySelectedToday" style="width:100%;margin-top:7px">✓ Field Verify Selected Today</button>
+<button class="btn" id="moveSelectedAsset" style="width:100%;margin-top:7px">⌖ Correct Selected Location</button>
+<button class="btn" id="jumpAddFieldAsset" style="width:100%;margin-top:7px">＋ New Asset — Tap Map Location</button>
+<div id="fieldModeMsg" class="placement-note" style="display:none;margin-top:7px"></div></div></div></div>
+<div class="section-title">ASSET REGISTER</div>
+<div class="card"><div class="card-bd" id="assetRegister"></div></div>
+<div class="section-title">FIELD MAPPING PROGRESS</div>
+<div class="card"><div class="card-bd" id="mappingQueue"></div></div>
+<div class="section-title">FIND AN ITEM</div>
+    <div class="card"><div class="card-bd">
+      <input id="searchBox" class="search" placeholder="Search asset ID, unit, valve, riser, hydrant…">
+      <div id="searchResults" class="result-list"></div>
+    </div></div>
+
+    <div class="section-title">MAP LAYERS</div>
+    <div class="card"><div class="card-bd">
+      <label class="check"><input type="checkbox" id="showUnits" checked> Units / buildings</label>
+      <label class="check"><input type="checkbox" id="showZones" checked> Zone valves</label>
+      <label class="check"><input type="checkbox" id="showGates" checked> Gate / isolation valves</label>
+      <label class="check"><input type="checkbox" id="showHydrants" checked> Hydrants</label>
+      <label class="check"><input type="checkbox" id="showPressure" checked> Pressure risers</label>
+    </div></div>
+
+    <div class="section-title legacy-placement">ADD / MAP FIELD ASSET</div>
+    <div class="card legacy-placement"><div class="card-bd">
+      <select id="newAssetType"><option>Zone Valve</option><option>Gate / Isolation Valve</option><option>Hydrant</option><option>Pressure Riser</option><option>Manhole</option><option>Main Shut-Off Valve</option><option>Irrigation Controller</option><option>Water Meter / Backflow Assembly</option><option>Storm Catch Basin / Inlet</option><option>Storm Manhole / Structure</option><option>Storm Outlet / Discharge</option><option>Sanitary Manhole / Cleanout</option><option>Exterior / Site Light</option><option>Mailbox / Cluster Box</option><option>Traffic / Property Sign</option><option>Road / Drive / Parking Surface</option><option>Sidewalk / Concrete</option><option>Drainage Swale / Culvert</option><option>Retaining Wall / Landscape Structure</option><option>Tree / Landscape Asset</option><option>Building Exterior Component</option><option>Other Field Asset</option></select>
+      <input id="newAssetLabel" placeholder="Asset label / identifier" style="margin-top:6px">
+      <input id="newAssetLocation" placeholder="Field location note" style="margin-top:6px">
+      <button class="btn primary" id="placeAsset" style="margin-top:7px">Place on Current Map</button>
+      <button class="btn" id="cancelPlace" style="margin-top:7px;display:none">Cancel</button>
+      <div id="placementMsg" class="placement-note" style="display:none"></div>
+    </div></div>
+
+    <div class="section-title">TOOLS</div>
+    <div class="card"><div class="card-bd">
+      <button class="btn" id="openSecurity" style="width:100%;margin-bottom:8px">🔒 Access & Security</button>
+      <div class="zoomrow">
+        <button class="btn" id="zoomOut">−</button>
+        <button class="btn" id="zoomReset">100%</button>
+        <button class="btn" id="zoomIn">+</button>
+      </div>
+      <p class="muted">Records you add are saved in this browser on this device. Use Export Data as a backup or to move the records to another computer.</p>
+    </div></div>
+
+    <div class="section-title">LEGEND</div>
+    <div class="card"><div class="card-bd legend">
+      <div><i style="background:#0a8c51"></i>Zone valve (46 mapped)</div>
+      <div><i style="background:#d33c3c;border-radius:4px"></i>Gate valve</div>
+      <div><i style="background:#1687e0"></i>Hydrant</div>
+      <div><i style="background:#8c39c7"></i>Riser</div>
+      <div><i style="background:white;border:2px solid #81909e;border-radius:4px"></i>Unit / building</div>
+    </div></div>
+  </aside>
+
+  <main class="map-wrap">
+    <div style="margin-bottom:9px;padding:9px 11px;background:#edf7f2;border:1px solid #a9d4bf;border-radius:7px;font-size:12px;color:#315548">
+      <b>Source-based property map:</b> locations and infrastructure are being built from the original Brewer Park Place drawings. All Times New Roman Bold 20 zone numbers on the irrigation drawing are now mapped as Zone Valves (46 physical valve points; zones 34 and 42 each have A/B valves). The polished concept image is visual inspiration only and is not used as geographic data.
+    </div>
+    <div class="notice" id="layerNotice">This original utility drawing is displayed as a separate source layer because its scan does not share the exact alignment of the irrigation drawing.</div>
+    <div class="stage" id="stage">
+      <img id="mapImage" alt="Brewer Park Place map">
+      <div id="hotspotLayer"></div>
+    </div>
+  </main>
+
+  <aside class="details">
+    <div class="card">
+      <div class="card-hd">SELECTED ITEM</div>
+      <div class="card-bd">
+        <div class="row" style="justify-content:space-between">
+          <div id="detailTitle" class="detail-title">Select an item</div>
+          <span id="detailTypeBadge" class="badge"></span>
+        </div>
+        <div id="detailKv" class="kv"></div>
+        <div id="assetSummary" class="asset-summary"></div>
+        <div class="muted" style="margin-top:8px">Every mapped symbol is its own asset record. Status, verification, life-cycle data, inspection dates, service relationships, work orders, maintenance, documents/photos, notes, and timeline remain attached to that asset.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">LOCATION STATUS</div>
+      <div class="card-bd">
+        <label class="muted">Current status</label>
+        <select id="statusSelect" style="margin-top:5px"><option>Normal</option><option>Watch</option><option>Needs Attention</option><option>Out of Service</option></select>
+        <label class="muted" style="display:block;margin-top:9px">Responsibility</label>
+        <select id="responsibilitySelect" style="margin-top:5px"><option>Association</option><option>Co-owner</option><option>Shared / Review Needed</option><option>Not Assigned</option></select>
+        <label class="muted" style="display:block;margin-top:9px">Location verification</label>
+        <select id="verificationSelect" style="margin-top:5px"><option>Source Drawing</option><option>Field Verified</option><option>Needs Field Verification</option></select>
+        <label class="muted" style="display:block;margin-top:9px">Last verified</label>
+        <input type="date" id="verifiedDate" style="margin-top:5px">
+        <button class="btn primary" id="saveStatus" style="margin-top:8px">Save Asset Status</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd">ASSET PROFILE / LIFE-CYCLE DATA</div>
+      <div class="card-bd asset-grid">
+        <div><label>Criticality</label><select id="criticalitySelect"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>
+        <div><label>Install / approximate year</label><input id="installYear" placeholder="Unknown"></div>
+        <div><label>Manufacturer</label><input id="manufacturer" placeholder="Unknown"></div>
+        <div><label>Model</label><input id="model" placeholder="Unknown"></div>
+        <div><label>Serial / identifying number</label><input id="serial" placeholder="Unknown"></div>
+        <div><label>Expected service life (years)</label><input id="serviceLife" type="number" min="0" placeholder=""></div>
+        <div><label>Last inspection</label><input id="lastInspection" type="date"></div>
+        <div><label>Next inspection due</label><input id="nextInspection" type="date"></div>
+        <div class="span2"><label>Access / shutoff / locating instructions</label><textarea id="accessInfo" placeholder="How to find, open, isolate, or safely access this asset"></textarea></div>
+        <div class="span2"><label>Replacement planning / capital note</label><textarea id="replacementPlan" placeholder="Replacement priority, estimated year, budgeting note, known concerns"></textarea></div>
+        <div class="span2"><button class="btn primary" id="saveProfile">Save Asset Profile</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">RELATED ASSETS / SERVICE CONNECTIONS</div>
+      <div class="card-bd">
+        <div class="muted">Use confirmed relationships for assets that actually serve, isolate, feed, drain, or belong to one another. Nearby items are shown separately as proximity only.</div>
+        <div class="row" style="margin-top:8px"><select id="relationType" style="flex:0 0 120px"><option>Serves</option><option>Fed By</option><option>Isolates</option><option>Drains To</option><option>Associated With</option></select><select id="relationAsset" style="flex:1"></select><button class="btn primary" id="addRelation">Link</button></div>
+        <div id="relationshipList" style="margin-top:9px"></div>
+        <div class="muted" style="margin-top:9px"><b>Nearest mapped assets (proximity only)</b></div><div id="nearbyList"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">WORK ORDERS AT THIS LOCATION</div>
+      <div class="card-bd">
+        <div class="row"><input type="text" id="woText" placeholder="Describe issue / work order" style="flex:1"><button class="btn primary" id="addWO">Add</button></div>
+        <div id="woList" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd">ASSET HISTORY / TIMELINE</div>
+      <div class="card-bd">
+        <div class="muted">All activity recorded against this asset appears here in date order.</div>
+        <div id="timelineList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">NOTES</div>
+      <div class="card-bd">
+        <textarea id="notesBox" placeholder="Add field notes, condition, access instructions, contractor notes…"></textarea>
+        <div class="row" style="margin-top:7px">
+          <button class="btn primary" id="saveNotes">Save Notes</button>
+          <span id="savedMsg"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">MAINTENANCE HISTORY</div>
+      <div class="card-bd">
+        <div class="row">
+          <input type="date" id="maintDate" style="flex:0 0 135px">
+          <input type="text" id="maintText" placeholder="Work performed / finding" style="flex:1">
+          <button class="btn primary" id="addMaint">Add</button>
+        </div>
+        <div id="maintenanceList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">DOCUMENT / PHOTO REFERENCES</div>
+      <div class="card-bd">
+        <input type="text" id="docLabel" placeholder="Example: Valve 23 photo">
+        <input type="text" id="docLink" placeholder="Google Drive link or reference" style="margin-top:7px">
+        <button class="btn primary" id="addDoc" style="margin-top:7px">Add Reference</button>
+        <div id="docList" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const images = {
+  "dashboard": "assets/dashboard.png",
+  "irrigation": "assets/irrigation.jpg",
+  "storm": "assets/storm.jpg",
+  "sanitary": "assets/sanitary.jpg"
+};
+
+let items = [
+  // Infrastructure - coordinates are percentages on the irrigation source drawing.
+  // Zone valves. Source drawing key: zone numbers are Times New Roman Bold 20.
+  // There are 46 physical zone-valve points because zones 34 and 42 are each split into A/B valves.
+  {id:"Z1", label:"Valve 1", type:"Zone Valve", cat:"zone", x:76.55, y:85.06, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z2", label:"Valve 2", type:"Zone Valve", cat:"zone", x:77.78, y:85.16, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z3", label:"Valve 3", type:"Zone Valve", cat:"zone", x:70.62, y:85.06, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z4", label:"Valve 4", type:"Zone Valve", cat:"zone", x:64.52, y:84.96, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z5", label:"Valve 5", type:"Zone Valve", cat:"zone", x:84.95, y:72.17, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z6", label:"Valve 6", type:"Zone Valve", cat:"zone", x:84.95, y:71.44, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z7", label:"Valve 7", type:"Zone Valve", cat:"zone", x:84.95, y:70.70, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z8", label:"Valve 8", type:"Zone Valve", cat:"zone", x:83.66, y:57.32, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z9", label:"Valve 9", type:"Zone Valve", cat:"zone", x:65.47, y:70.31, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z10", label:"Valve 10", type:"Zone Valve", cat:"zone", x:53.67, y:47.46, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z11", label:"Valve 11", type:"Zone Valve", cat:"zone", x:56.41, y:50.34, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z12", label:"Valve 12", type:"Zone Valve", cat:"zone", x:83.66, y:56.54, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z13", label:"Valve 13", type:"Zone Valve", cat:"zone", x:84.95, y:40.23, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z14", label:"Valve 14", type:"Zone Valve", cat:"zone", x:84.95, y:39.50, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z15", label:"Valve 15", type:"Zone Valve", cat:"zone", x:53.67, y:46.34, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z16", label:"Valve 16", type:"Zone Valve", cat:"zone", x:83.94, y:27.73, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z17", label:"Valve 17", type:"Zone Valve", cat:"zone", x:72.86, y:24.66, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z18", label:"Valve 18", type:"Zone Valve", cat:"zone", x:64.52, y:11.47, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z19", label:"Valve 19", type:"Zone Valve", cat:"zone", x:58.20, y:10.84, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z20", label:"Valve 20", type:"Zone Valve", cat:"zone", x:53.67, y:45.17, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z21", label:"Valve 21", type:"Zone Valve", cat:"zone", x:43.31, y:20.21, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z22", label:"Valve 22", type:"Zone Valve", cat:"zone", x:37.44, y:26.27, location:"Center loop", measurements:"Approximately 27 ft from Valve 23", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z23", label:"Valve 23", type:"Zone Valve", cat:"zone", x:42.75, y:22.75, location:"Northwest / west side of center loop near Unit 94", measurements:'34" deep; approximately 27 ft to Valve 22', system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z24", label:"Valve 24", type:"Zone Valve", cat:"zone", x:52.27, y:45.17, location:"Center-east loop near Units 101–105", measurements:"See original valve guide", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z25", label:"Valve 25", type:"Zone Valve", cat:"zone", x:52.27, y:47.46, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z26", label:"Valve 26", type:"Zone Valve", cat:"zone", x:42.47, y:59.03, location:"South-center loop near Units 139–141", measurements:"See original valve guide", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z27", label:"Valve 27", type:"Zone Valve", cat:"zone", x:29.32, y:30.52, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z28", label:"Valve 28", type:"Zone Valve", cat:"zone", x:30.33, y:29.98, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z29", label:"Valve 29", type:"Zone Valve", cat:"zone", x:20.93, y:30.18, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z30", label:"Valve 30", type:"Zone Valve", cat:"zone", x:10.35, y:34.72, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z31", label:"Valve 31", type:"Zone Valve", cat:"zone", x:7.50, y:43.31, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z32", label:"Valve 32", type:"Zone Valve", cat:"zone", x:13.77, y:53.03, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z33", label:"Valve 33", type:"Zone Valve", cat:"zone", x:11.25, y:53.03, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z34A", label:"Valve 34a", type:"Zone Valve", cat:"zone", x:12.48, y:53.03, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z34B", label:"Valve 34b", type:"Zone Valve", cat:"zone", x:15.11, y:73.73, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z35", label:"Valve 35", type:"Zone Valve", cat:"zone", x:42.53, y:62.01, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z36", label:"Valve 36", type:"Zone Valve", cat:"zone", x:44.77, y:62.01, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z37", label:"Valve 37", type:"Zone Valve", cat:"zone", x:43.65, y:62.01, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z38", label:"Valve 38", type:"Zone Valve", cat:"zone", x:54.56, y:84.91, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z39", label:"Valve 39", type:"Zone Valve", cat:"zone", x:57.75, y:61.96, location:"South-central boundary", measurements:"See original valve guide", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z40", label:"Valve 40", type:"Zone Valve", cat:"zone", x:43.20, y:84.96, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z41", label:"Valve 41", type:"Zone Valve", cat:"zone", x:14.94, y:72.75, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z42A", label:"Valve 42a", type:"Zone Valve", cat:"zone", x:19.14, y:83.84, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z42B", label:"Valve 42b", type:"Zone Valve", cat:"zone", x:17.91, y:84.38, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z43", label:"Valve 43", type:"Zone Valve", cat:"zone", x:28.82, y:86.91, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"Z44", label:"Valve 44", type:"Zone Valve", cat:"zone", x:44.21, y:85.11, location:"Original irrigation drawing", measurements:"Zone valve identified by Times New Roman Bold 20 zone number on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"G27", label:"Gate Valve 27", type:"Gate / Isolation Valve", cat:"gate", x:29.2, y:23.8, location:"Northwest side", measurements:"See original valve guide", system:"Irrigation"},
+  {id:"H23", label:"Hydrant near Valve 23", type:"Hydrant", cat:"hydrant", x:31.1, y:25.2, location:"Northwest side near Valve 23", measurements:"Approximately 21 ft from Valve 23", system:"Irrigation"},
+  {id:"H101", label:"Hydrant near Unit 101", type:"Hydrant", cat:"hydrant", x:54.4, y:43.0, location:"Center of property near Unit 101", measurements:"Field reference", system:"Irrigation"},
+  {id:"H31", label:"Hydrant near Unit 31", type:"Hydrant", cat:"hydrant", x:66.3, y:68.2, location:"East-central area", measurements:"Field reference", system:"Irrigation"},
+  {id:"P59", label:"Pressure Riser", type:"Pressure Riser", cat:"pressure", x:67.3, y:7.5, location:"North area", measurements:"59 psi", system:"Irrigation"},
+  {id:"P60", label:"Pressure Riser", type:"Pressure Riser", cat:"pressure", x:56.0, y:31.5, location:"Central area", measurements:"60 psi", system:"Irrigation"},
+  {id:"P50", label:"Pressure Riser", type:"Pressure Riser", cat:"pressure", x:58.5, y:53.5, location:"South-central / east area", measurements:"50 psi", system:"Irrigation"},
+  {id:"MH1", label:"Manhole", type:"Manhole", cat:"manhole", x:68.7, y:21.9, location:"Northeast interior drive near Units 70–78 and Valve 17", measurements:"Identified on source drawing as M/H", system:"Site Infrastructure", source:"Original irrigation drawing"},
+  {id:"IC1", label:"Irrigation Controller", type:"Irrigation Controller", cat:"controller", x:90.0, y:78.7, location:"Main entrance controller housing", measurements:"Located inside large square housing shown on source drawing", system:"Irrigation", source:"Original irrigation drawing"},
+  {id:"MS1", label:"Main Shut-Off", type:"Main Shut-Off Valve", cat:"mainshutoff", x:90.0, y:81.0, location:"Main entrance controller / shut-off housing", measurements:"Main irrigation shut-off located at controller housing", system:"Irrigation", source:"Original irrigation drawing"},
+
+  // Unit/building touch points for common navigation. These can be refined/expanded.
+  {id:"U139", label:"Unit 139", type:"Unit / Building", cat:"unit", x:46.1, y:65.4, location:"South-center west", measurements:"", system:"Property"}
+];
+
+const defaults = { notes: {}, noteUpdated: {}, maintenance: {}, docs: {}, status: {}, responsibility: {}, workorders: {}, verification: {}, verifiedDate: {}, activity: {}, profiles:{}, relationships:{}, customItems:[], securityUsers:[] };
+let store = JSON.parse(localStorage.getItem("bppUtilityMapData") || JSON.stringify(defaults));
+if(!store.notes) store.notes={}; if(!store.maintenance) store.maintenance={}; if(!store.docs) store.docs={};
+if(!store.status) store.status={}; if(!store.responsibility) store.responsibility={}; if(!store.workorders) store.workorders={};
+if(!store.verification) store.verification={}; if(!store.verifiedDate) store.verifiedDate={}; if(!store.noteUpdated) store.noteUpdated={}; if(!store.activity) store.activity={}; if(!store.profiles) store.profiles={}; if(!store.relationships) store.relationships={}; if(!store.customItems) store.customItems=[]; if(!store.securityUsers) store.securityUsers=[]; items=items.concat(store.customItems);
+
+let currentLayer="irrigation", selectedId="Z23", zoom=1;
+
+const mapImage=document.getElementById("mapImage");
+const hotspotLayer=document.getElementById("hotspotLayer");
+const detailTitle=document.getElementById("detailTitle");
+const detailBadge=document.getElementById("detailTypeBadge");
+const detailKv=document.getElementById("detailKv");
+const notesBox=document.getElementById("notesBox");
+const maintenanceList=document.getElementById("maintenanceList");
+const docList=document.getElementById("docList");
+const searchBox=document.getElementById("searchBox");
+const searchResults=document.getElementById("searchResults");
+const statusSelect=document.getElementById("statusSelect");
+const responsibilitySelect=document.getElementById("responsibilitySelect");
+const verificationSelect=document.getElementById("verificationSelect");
+const verifiedDate=document.getElementById("verifiedDate");
+const assetRegister=document.getElementById("assetRegister");
+const woList=document.getElementById("woList");
+const stage=document.getElementById("stage");
+const layerNotice=document.getElementById("layerNotice");
+const timelineList=document.getElementById("timelineList");
+const assetSummary=document.getElementById("assetSummary");
+const mappingQueue=document.getElementById("mappingQueue");
+const criticalitySelect=document.getElementById("criticalitySelect");
+const installYear=document.getElementById("installYear");
+const manufacturer=document.getElementById("manufacturer");
+const model=document.getElementById("model");
+const serial=document.getElementById("serial");
+const serviceLife=document.getElementById("serviceLife");
+const lastInspection=document.getElementById("lastInspection");
+const nextInspection=document.getElementById("nextInspection");
+const accessInfo=document.getElementById("accessInfo");
+const replacementPlan=document.getElementById("replacementPlan");
+const relationshipList=document.getElementById("relationshipList");
+const nearbyList=document.getElementById("nearbyList");
+const relationAsset=document.getElementById("relationAsset");
+const relationType=document.getElementById("relationType");
+const newAssetType=document.getElementById("newAssetType");
+const newAssetLabel=document.getElementById("newAssetLabel");
+const newAssetLocation=document.getElementById("newAssetLocation");
+const placeAssetBtn=document.getElementById("placeAsset");
+const cancelPlaceBtn=document.getElementById("cancelPlace");
+const placementMsg=document.getElementById("placementMsg");
+let placementPending=false;
+
+function saveStore(){
+  localStorage.setItem("bppUtilityMapData", JSON.stringify(store));
+  updateCounters();
+}
+const assetTypeMeta={
+  pressure:{name:"Pressure Riser",prefix:"PR",symbol:"R",purpose:"Reduces and stabilizes irrigation supply pressure",serviceScope:"Irrigation water supply feeding downstream zones",inspect:"Verify accessible, dry, identifiable, and operating near design pressure; document leaks, damage, or adjustment",tracking:"Pressure readings, repairs, regulator replacement, winterization/startup findings, photos",spec:"50 PSI"},
+  zone:{name:"Zone Valve",prefix:"ZV",symbol:"V",purpose:"Opens and closes water flow to an individual irrigation zone",serviceScope:"Specific sprinkler zone / landscape area shown on the source drawing",inspect:"Confirm valve box access, labeling, wiring/solenoid condition, leakage, and zone operation",tracking:"Zone failures, solenoid/diaphragm repairs, wiring issues, leak repairs, seasonal service"},
+  manhole:{name:"Manhole",prefix:"MH",symbol:"MH",purpose:"Provides access to underground site infrastructure",serviceScope:"Underground utility / drainage access point",inspect:"Check cover condition, accessibility, settlement, damage, and evidence of blockage or infiltration",tracking:"Inspections, cleaning, repairs, cover/frame work, photos"},
+  controller:{name:"Irrigation Controller",prefix:"IC",symbol:"C",purpose:"Controls scheduled operation of irrigation zones",serviceScope:"Property irrigation control system",inspect:"Check enclosure, power, programming, wiring, communications, and seasonal settings",tracking:"Programming changes, electrical repairs, controller replacement, seasonal startup/shutdown"},
+  mainshutoff:{name:"Main Shut-Off Valve",prefix:"MS",symbol:"S",purpose:"Provides primary isolation of the irrigation water supply",serviceScope:"Entire irrigation system",inspect:"Confirm accessibility, identification, valve condition, leakage, and operability",tracking:"Exercise tests, leak repairs, valve service/replacement, emergency shut-offs"},
+  gate:{name:"Gate / Isolation Valve",prefix:"GV",symbol:"G",purpose:"Isolates a branch or section of the water system for service",serviceScope:"Upstream/downstream section associated with this valve location",inspect:"Confirm valve is reachable, identified, operable, and not leaking; record direction/turn count when known",tracking:"Exercise dates, leak repairs, replacement, access changes, shutoff events"},
+  hydrant:{name:"Hydrant / Water Access",prefix:"HY",symbol:"H",purpose:"Provides a mapped water access or utility reference point",serviceScope:"Immediate common-area water/utility location",inspect:"Confirm access, physical condition, leakage, visibility, and field location",tracking:"Inspections, repairs, access issues, contractor use, photos"},
+  unit:{name:"Unit / Building",prefix:"U",symbol:"",purpose:"Anchors property history to a physical building location",serviceScope:"Unit/building and associated common or limited-common-element records",inspect:"Use as the location record for exterior/common-element observations and related work",tracking:"Work orders, inspections, projects, violations, photos, vendor history, cost history"},
+  field:{name:"Field-Mapped Asset",prefix:"FA",symbol:"A",purpose:"Tracks a verified property asset added during field inspection",serviceScope:"Defined by the selected asset type and field location",inspect:"Confirm exact location, access, condition, identifying information, and relationship to nearby systems",tracking:"Inspections, work orders, maintenance, photos, documents, replacement planning, and service relationships"}
+};
+const fieldMappingTypes=[
+  ["Irrigation Controller","Controller / power source for irrigation zones"],
+  ["Water Meter / Backflow Assembly","Main irrigation supply, meter, backflow or pressure-control equipment"],
+  ["Storm Catch Basin / Inlet","Surface drainage collection point"],
+  ["Storm Manhole / Structure","Storm-sewer access or junction structure"],
+  ["Storm Outlet / Discharge","Drainage outlet, end section, or discharge point"],
+  ["Sanitary Manhole / Cleanout","Sanitary-sewer access point"],
+  ["Exterior / Site Light","Pole, wall-pack, monument, or common-area lighting"],
+  ["Mailbox / Cluster Box","Common postal equipment and structure"],
+  ["Traffic / Property Sign","Entrance, parking, regulatory, directional, or identification sign"],
+  ["Road / Drive / Parking Surface","Association-maintained pavement section"],
+  ["Sidewalk / Concrete","Common walkway, apron, curb, or concrete section"],
+  ["Drainage Swale / Culvert","Grading/drainage feature requiring inspection"],
+  ["Retaining Wall / Landscape Structure","Common structural landscape element"],
+  ["Tree / Landscape Asset","High-value or risk-relevant common landscape item"],
+  ["Building Exterior Component","Roof, gutter, downspout, siding, trim, chimney, or shared exterior component"]
+];
+function displayAssetId(item){
+  if(item.assetId) return item.assetId;
+  const m=assetTypeMeta[item.cat]||{};
+  const n=(item.id.match(/\d+[A-Za-z]?$/)||[item.id])[0];
+  return item.cat==="unit" ? item.id : `${m.prefix||item.cat.toUpperCase()}-${n}`;
+}
+function renderAssetRegister(){
+  const order=["pressure","zone","gate","hydrant","unit"];
+  assetRegister.innerHTML=order.map(cat=>{
+    const meta=assetTypeMeta[cat], count=items.filter(x=>x.cat===cat).length;
+    return `<button class="result" data-cat-filter="${cat}" style="width:100%;text-align:left;margin-bottom:5px"><b>${meta.symbol?meta.symbol+" · ":""}${meta.name}</b><small>${count} mapped · ${meta.purpose}</small></button>`;
+  }).join("");
+  assetRegister.querySelectorAll('[data-cat-filter]').forEach(b=>b.addEventListener('click',()=>{
+    const cat=b.dataset.catFilter;
+    const first=items.find(x=>x.cat===cat); if(first){selectItem(first.id);}
+  }));
+}
+
+function todayStamp(){ return new Date().toISOString().slice(0,10); }
+function nowStamp(){ return new Date().toISOString(); }
+function addActivity(id,type,text,date){
+  (store.activity[id] ||= []).push({type,text,date:date||todayStamp(),ts:nowStamp()});
+}
+function renderMappingQueue(){
+  const groups=[
+    ["Zone Valves", i=>i.cat==="zone"],
+    ["Pressure Risers", i=>i.cat==="pressure"],
+    ["Gate / Isolation Valves", i=>i.cat==="gate"],
+    ["Hydrants", i=>i.cat==="hydrant"],
+    ["Manholes", i=>i.cat==="manhole" || /manhole|cleanout/i.test(i.type||"")],
+    ["Controllers", i=>i.cat==="controller" || /controller/i.test(i.type||"")],
+    ["Main Shut-Offs", i=>i.cat==="mainshutoff" || /shut.?off/i.test(i.type||"")],
+    ["Other Field Assets", i=>i.cat==="field"]
+  ];
+  mappingQueue.innerHTML=groups.map(([name,test])=>{
+    const list=items.filter(test);
+    if(!list.length) return "";
+    const verified=list.filter(i=>store.verification[i.id]==="Field Verified").length;
+    const pct=Math.round((verified/list.length)*100);
+    return `<div class="progress-row">
+      <div class="progress-head"><b>${escapeHtml(name)}</b><span>${verified} / ${list.length} field verified</span></div>
+      <div class="progress-track"><i style="width:${pct}%"></i></div>
+    </div>`;
+  }).join("") || '<div class="muted">No mapped assets yet.</div>';
+}
+function distance(a,b){const dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy)}
+function renderRelations(){
+  relationAsset.innerHTML=items.filter(x=>x.id!==selectedId).map(x=>`<option value="${x.id}">${escapeHtml(displayAssetId(x))} · ${escapeHtml(x.label)}</option>`).join("");
+  const rels=store.relationships[selectedId]||[];
+  relationshipList.innerHTML=rels.length?"":'<div class="muted">No confirmed service relationships recorded.</div>';
+  rels.forEach((r,index)=>{const target=itemById(r.target); if(!target)return; const d=document.createElement("div");d.className="relation";d.innerHTML=`<b>${escapeHtml(r.type)} → ${escapeHtml(displayAssetId(target))} · ${escapeHtml(target.label)}</b><small>Confirmed relationship entered ${escapeHtml(r.date||'')}</small>`;const del=document.createElement("button");del.className="btn";del.style.marginTop="5px";del.style.padding="4px 7px";del.textContent="Remove";del.onclick=()=>{rels.splice(index,1);saveStore();renderRelations();renderTimeline();};d.appendChild(del);relationshipList.appendChild(d)});
+  const here=itemById(selectedId); const near=items.filter(x=>x.id!==selectedId).map(x=>({x,d:distance(here,x)})).sort((a,b)=>a.d-b.d).slice(0,5);
+  nearbyList.innerHTML=near.map(n=>`<div class="relation"><b>${escapeHtml(displayAssetId(n.x))} · ${escapeHtml(n.x.label)}</b><small>${escapeHtml(n.x.type)} · relative map distance ${n.d.toFixed(1)}</small></div>`).join("");
+}
+function loadProfile(){
+ const p=store.profiles[selectedId]||{}; criticalitySelect.value=p.criticality||"Medium"; installYear.value=p.installYear||""; manufacturer.value=p.manufacturer||""; model.value=p.model||""; serial.value=p.serial||""; serviceLife.value=p.serviceLife||""; lastInspection.value=p.lastInspection||""; nextInspection.value=p.nextInspection||""; accessInfo.value=p.accessInfo||""; replacementPlan.value=p.replacementPlan||"";
+}
+function assetCounts(id){
+  return {
+    wo:(store.workorders[id]||[]).length,
+    maint:(store.maintenance[id]||[]).length,
+    docs:(store.docs[id]||[]).length,
+    notes:(store.notes[id]||'').trim()?1:0
+  };
+}
+function renderAssetSummary(){
+  const c=assetCounts(selectedId);
+  assetSummary.innerHTML=`<div><strong>${c.wo}</strong><span>Work Orders</span></div><div><strong>${c.maint}</strong><span>Maintenance</span></div><div><strong>${c.docs}</strong><span>Documents</span></div><div><strong>${c.notes}</strong><span>Notes</span></div>`;
+}
+function renderTimeline(){
+  const events=[];
+  (store.workorders[selectedId]||[]).forEach((r,i)=>events.push({date:r.created||'',ts:r.createdTs||'',type:'Work Order',text:`${r.text} · ${r.status||'Open'}${r.closed?' · closed '+r.closed:''}`}));
+  (store.maintenance[selectedId]||[]).forEach(r=>events.push({date:r.date||'',ts:r.ts||'',type:'Maintenance',text:r.text}));
+  (store.docs[selectedId]||[]).forEach(r=>events.push({date:r.added||'',ts:r.ts||'',type:'Document / Photo',text:r.label||r.link||'Reference'}));
+  if((store.notes[selectedId]||'').trim()) events.push({date:(store.noteUpdated[selectedId]||'').slice(0,10),ts:store.noteUpdated[selectedId]||'',type:'Notes',text:'Asset notes updated'});
+  (store.activity[selectedId]||[]).forEach(r=>events.push({date:r.date||'',ts:r.ts||'',type:r.type||'Activity',text:r.text||''}));
+  events.sort((a,b)=>String(b.ts||b.date).localeCompare(String(a.ts||a.date)));
+  timelineList.innerHTML=events.length?'':'<div class="muted">No asset history yet.</div>';
+  events.slice(0,40).forEach(e=>{
+    const d=document.createElement('div'); d.className='timeline-row';
+    d.innerHTML=`<b>${escapeHtml(e.type)}</b><span>${escapeHtml(e.text)}</span><small>${escapeHtml(e.date||'Date not recorded')}</small>`;
+    timelineList.appendChild(d);
+  });
+}
+
+function updateCounters(){
+  document.getElementById("assetCount").textContent=items.length;
+  const n=Object.values(store.maintenance).reduce((a,x)=>a+x.length,0)+Object.values(store.docs).reduce((a,x)=>a+x.length,0)+Object.values(store.workorders).reduce((a,x)=>a+x.length,0)+Object.values(store.notes).filter(x=>String(x||"").trim()).length+Object.keys(store.profiles||{}).length+Object.values(store.relationships||{}).reduce((a,x)=>a+x.length,0);
+  document.getElementById("recordCount").textContent=n;
+}
+
+function itemById(id){ return items.find(x=>x.id===id); }
+
+function buildMarkerClusters(layerItems){
+  // Zone-valve labels only. Other nearby asset types never move.
+  const zoneItems=layerItems.filter(item=>item.cat==="zone");
+  const thresholdX=3.2, thresholdY=3.2, seen=new Set(), groups=[];
+  zoneItems.forEach(seed=>{
+    if(seen.has(seed.id)) return;
+    const group=[], queue=[seed]; seen.add(seed.id);
+    while(queue.length){
+      const a=queue.shift(); group.push(a);
+      zoneItems.forEach(b=>{
+        if(seen.has(b.id)) return;
+        if(Math.abs(Number(a.x)-Number(b.x))<=thresholdX && Math.abs(Number(a.y)-Number(b.y))<=thresholdY){seen.add(b.id);queue.push(b)}
+      });
+    }
+    if(group.length>1) groups.push(group);
+  });
+  return groups;
+}
+
+let activeZoneCluster=null;
+
+function setClusterExpanded(clusterId,on){
+  const nodes=[...hotspotLayer.querySelectorAll(`.hotspot.zone[data-cluster="${clusterId}"]`)];
+  nodes.forEach(n=>n.classList.toggle("cluster-expanded",on));
+  if(on){
+    if(activeZoneCluster && activeZoneCluster!==clusterId) setClusterExpanded(activeZoneCluster,false);
+    activeZoneCluster=clusterId;
+  }else if(activeZoneCluster===clusterId){
+    activeZoneCluster=null;
+  }
+}
+
+function pointInsideExpandedCluster(clientX,clientY,clusterId){
+  const nodes=[...hotspotLayer.querySelectorAll(`.hotspot.zone[data-cluster="${clusterId}"]`)];
+  if(!nodes.length) return false;
+  const rects=nodes.map(n=>n.getBoundingClientRect());
+  const pad=18;
+  const left=Math.min(...rects.map(r=>r.left))-pad;
+  const right=Math.max(...rects.map(r=>r.right))+pad;
+  const top=Math.min(...rects.map(r=>r.top))-pad;
+  const bottom=Math.max(...rects.map(r=>r.bottom))+pad;
+  return clientX>=left && clientX<=right && clientY>=top && clientY<=bottom;
+}
+
+// Keep an expanded zone cluster open while the pointer is anywhere inside
+// the scattered group, including the gaps between the labels.
+document.addEventListener("mousemove",e=>{
+  if(activeZoneCluster && !pointInsideExpandedCluster(e.clientX,e.clientY,activeZoneCluster)){
+    setClusterExpanded(activeZoneCluster,false);
+  }
+});
+
+function renderHotspots(){
+  hotspotLayer.innerHTML="";
+  const layerItems=items.filter(item=>(item.layer||"irrigation")===currentLayer);
+  const clusters=buildMarkerClusters(layerItems);
+  const clusterMap={};
+  clusters.forEach((group,gi)=>{
+    const cx=group.reduce((s,z)=>s+Number(z.x),0)/group.length;
+    const cy=group.reduce((s,z)=>s+Number(z.y),0)/group.length;
+    group.forEach((item,idx)=>clusterMap[item.id]={id:`cluster-${gi}`,idx,count:group.length,cx,cy,group});
+  });
+  layerItems.forEach(item=>{
+    const b=document.createElement("button");
+    b.type="button";
+    b.className=`hotspot ${item.cat}`;
+    b.dataset.id=item.id;
+    b.style.left=item.x+"%"; b.style.top=item.y+"%";
+    const meta=assetTypeMeta[item.cat]||{};
+    const markerStatus=store.status[item.id]||"Normal";
+    b.title=`${displayAssetId(item)} · ${item.label} · ${meta.name||item.type} · ${markerStatus}`;
+    b.dataset.status=markerStatus;
+    b.textContent=item.cat==="unit" ? item.label.replace("Unit ","") :
+                  item.cat==="zone" ? item.label.replace("Valve ","") :
+                  (item.cat==="field" ? (item.marker||"A") : (meta.symbol||"•"));
+    const c=clusterMap[item.id];
+    if(c){
+      b.classList.add("clustered"); b.dataset.cluster=c.id;
+      // Expand each zone label in the same direction it occupies on the source drawing.
+      // Example: upper-left remains upper-left; lower-right remains lower-right.
+      let vx=Number(item.x)-c.cx, vy=Number(item.y)-c.cy;
+      let mag=Math.hypot(vx,vy);
+      if(mag<0.05){
+        // Rare exact-overlap tie-breaker; preserve neighboring source orientation.
+        const prev=c.group[(c.idx-1+c.count)%c.count], next=c.group[(c.idx+1)%c.count];
+        vx=Number(next.x)-Number(prev.x); vy=Number(next.y)-Number(prev.y);
+        mag=Math.hypot(vx,vy);
+      }
+      if(mag<0.01){vx=1;vy=0;mag=1;}
+      const radius=c.count<=3?38:(c.count<=6?50:60);
+      let sx=(vx/mag)*radius, sy=(vy/mag)*radius;
+
+      // Pair-specific decluttering while preserving source-relative placement.
+      // 6 / 7: separate horizontally enough to remain individually readable.
+      // 32 / 34A: separate vertically enough to remain individually readable.
+      const pairIds=new Set(c.group.map(z=>z.id));
+      if(pairIds.has("Z6") && pairIds.has("Z7")){
+        if(item.id==="Z6") sx-=18;
+        if(item.id==="Z7") sx+=18;
+      }
+      if(pairIds.has("Z32") && pairIds.has("Z34A")){
+        if(item.id==="Z32") sy-=18;
+        if(item.id==="Z34A") sy+=18;
+      }
+      if(pairIds.has("Z15") && pairIds.has("Z20")){
+        // Keep 20 upper-right and 15 middle/right, matching the source drawing.
+        if(item.id==="Z20"){ sx+=12; sy-=20; }
+        if(item.id==="Z15"){ sx+=20; sy+=10; }
+      }
+      // User-confirmed display preferences for crowded labels.
+      if(item.id==="Z6"){ sx=Math.abs(sx)+42; }
+      if(item.id==="Z34A"){ sy=Math.abs(sy)+42; }
+
+      b.style.setProperty('--scatter-x',`${Math.round(sx)}px`);
+      b.style.setProperty('--scatter-y',`${Math.round(sy)}px`);
+      b.addEventListener('mouseenter',()=>setClusterExpanded(c.id,true));
+    }
+    if(item.id===selectedId) b.classList.add("selected");
+    b.addEventListener("click",()=>selectItem(item.id));
+    hotspotLayer.appendChild(b);
+  });
+  syncFilters();
+}
+
+function syncFilters(){
+  const states={
+    unit:document.getElementById("showUnits").checked,
+    zone:document.getElementById("showZones").checked,
+    gate:document.getElementById("showGates").checked,
+    hydrant:document.getElementById("showHydrants").checked,
+    pressure:document.getElementById("showPressure").checked
+  };
+  hotspotLayer.querySelectorAll(".hotspot").forEach(h=>{
+    const i=itemById(h.dataset.id); h.hidden=(i.cat in states)?!states[i.cat]:false;
+  });
+}
+
+function selectItem(id){
+  const item=itemById(id); if(!item) return;
+  selectedId=id;
+  detailTitle.textContent=item.label;
+  detailBadge.textContent=item.type;
+  const meta=assetTypeMeta[item.cat]||{};
+  const isRiser=item.cat==="pressure";
+  const sourceName=item.source|| (item.system==="Irrigation" ? "Valve Box Location Guide — Revised 8/30/22" : "BPP property map");
+  const verify=store.verification[id]||"Source Drawing";
+  const verifyDate=store.verifiedDate[id]||"";
+  detailKv.innerHTML=`<b>Asset ID:</b><span><strong>${displayAssetId(item)}</strong></span>
+    <b>Type:</b><span>${item.type}</span>
+    <b>Purpose:</b><span>${meta.purpose||"Property reference"}</span>
+    <b>Serves / scope:</b><span>${meta.serviceScope||"Property location"}</span>
+    <b>Inspection focus:</b><span>${meta.inspect||"Verify condition and location"}</span>
+    <b>Track against asset:</b><span>${meta.tracking||"Work, photos, notes, and history"}</span>
+    <b>System:</b><span>${item.system||"—"}</span>
+    <b>Location:</b><span>${item.location||"—"}</span>
+    ${isRiser ? `<b>Design specification:</b><span><strong>${meta.spec}</strong></span>
+    <b>Drawing / field notation:</b><span>${item.measurements||"—"}</span>` : `<b>Drawing / field detail:</b><span>${item.measurements||"—"}</span>`}
+    <b>Condition:</b><span>${store.status[id]||"Normal"}</span>
+    <b>Criticality:</b><span><span class="criticality">${(store.profiles[id]||{}).criticality||"Medium"}</span></span>
+    <b>Responsibility:</b><span>${store.responsibility[id]||"Not Assigned"}</span>
+    <b>Location verification:</b><span>${verify}${verifyDate?` · ${verifyDate}`:""}</span>
+    <b>Source:</b><span>${sourceName}</span>`;
+  notesBox.value=store.notes[id]||"";
+  statusSelect.value=store.status[id]||"Normal";
+  responsibilitySelect.value=store.responsibility[id]||"Not Assigned";
+  verificationSelect.value=verify;
+  verifiedDate.value=verifyDate;
+  renderWorkOrders();
+  renderMaintenance();
+  renderDocs();
+  renderAssetSummary();
+  loadProfile();
+  renderRelations();
+  renderTimeline();
+  renderHotspots();
+}
+
+function renderWorkOrders(){
+  const arr=store.workorders[selectedId]||[];
+  woList.innerHTML=arr.length ? "" : '<div class="muted">No work orders linked to this location.</div>';
+  arr.forEach((r,index)=>{
+    const d=document.createElement("div"); d.className="record";
+    d.innerHTML=`<b>${escapeHtml(r.text)}</b><small>Status: ${escapeHtml(r.status||"Open")}</small>`;
+    const toggle=document.createElement("button"); toggle.className="btn"; toggle.style.marginTop="6px"; toggle.style.padding="5px 7px"; toggle.textContent=r.status==="Closed"?"Reopen":"Close";
+    toggle.addEventListener("click",()=>{const closing=r.status!=="Closed"; r.status=closing?"Closed":"Open"; r.closed=closing?todayStamp():""; addActivity(selectedId,"Work Order",`${closing?"Closed":"Reopened"}: ${r.text}`,todayStamp()); saveStore();renderWorkOrders();renderAssetSummary();renderTimeline();});
+    d.appendChild(toggle); woList.appendChild(d);
+  });
+}
+function renderMaintenance(){
+  const arr=store.maintenance[selectedId]||[];
+  maintenanceList.innerHTML=arr.length ? "" : '<div class="muted">No maintenance records yet.</div>';
+  arr.slice().reverse().forEach((r,revIndex)=>{
+    const realIndex=arr.length-1-revIndex;
+    const d=document.createElement("div"); d.className="record";
+    d.innerHTML=`<b>${escapeHtml(r.text)}</b><small>${escapeHtml(r.date||"No date")}</small>`;
+    const del=document.createElement("button"); del.className="btn"; del.style.marginTop="6px"; del.style.padding="5px 7px"; del.textContent="Delete";
+    del.addEventListener("click",()=>{arr.splice(realIndex,1);saveStore();renderMaintenance();renderAssetSummary();renderTimeline();});
+    d.appendChild(del); maintenanceList.appendChild(d);
+  });
+}
+
+function renderDocs(){
+  const arr=store.docs[selectedId]||[];
+  docList.innerHTML=arr.length ? "" : '<div class="muted">No document references yet.</div>';
+  arr.forEach((r,index)=>{
+    const d=document.createElement("div"); d.className="record";
+    const safeLabel=escapeHtml(r.label||"Reference"); const safeLink=escapeHtml(r.link||"");
+    d.innerHTML = safeLink.startsWith("http") ? `<a href="${safeLink}" target="_blank" rel="noopener">${safeLabel}</a>` : `<b>${safeLabel}</b><small>${safeLink}</small>`;
+    const del=document.createElement("button"); del.className="btn"; del.style.marginTop="6px"; del.style.padding="5px 7px"; del.textContent="Delete";
+    del.addEventListener("click",()=>{arr.splice(index,1);saveStore();renderDocs();renderAssetSummary();renderTimeline();});
+    d.appendChild(del); docList.appendChild(d);
+  });
+}
+
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+}
+
+function setLayer(layer){
+  currentLayer=layer; mapImage.src=images[layer];
+  document.querySelectorAll(".layerTab").forEach(t=>t.classList.toggle("active",t.dataset.layer===layer));
+  layerNotice.style.display=(layer==="storm"||layer==="sanitary")?"block":"none";
+  renderHotspots();
+}
+
+function renderSearch(){
+  const q=searchBox.value.trim().toLowerCase();
+  const filtered=items.filter(i=>{const p=store.profiles[i.id]||{};return !q || (displayAssetId(i)+" "+i.label+" "+i.type+" "+i.location+" "+(p.manufacturer||"")+" "+(p.model||"")+" "+(p.serial||"")).toLowerCase().includes(q)}).slice(0,24);
+  searchResults.innerHTML="";
+  filtered.forEach(i=>{
+    const b=document.createElement("button"); b.className="result"; b.type="button";
+    b.innerHTML=`<b>${escapeHtml(i.label)}</b><span>${escapeHtml(i.type)} · ${escapeHtml(i.location)}</span>`;
+    b.addEventListener("click",()=>{setLayer(i.layer||"irrigation");selectItem(i.id);});
+    searchResults.appendChild(b);
+  });
+}
+
+document.querySelectorAll(".layerTab").forEach(t=>t.addEventListener("click",()=>setLayer(t.dataset.layer)));
+["showUnits","showZones","showGates","showHydrants","showPressure"].forEach(id=>document.getElementById(id).addEventListener("change",syncFilters));
+searchBox.addEventListener("input",renderSearch);
+
+document.getElementById("zoomIn").addEventListener("click",()=>{zoom=Math.min(1.8,zoom+.1);stage.style.maxWidth=(1100*zoom)+"px";});
+document.getElementById("zoomOut").addEventListener("click",()=>{zoom=Math.max(.7,zoom-.1);stage.style.maxWidth=(1100*zoom)+"px";});
+document.getElementById("zoomReset").addEventListener("click",()=>{zoom=1;stage.style.maxWidth="1100px";});
+document.getElementById("printBtn").addEventListener("click",()=>window.print());
+
+document.getElementById("saveStatus").addEventListener("click",()=>{
+  store.status[selectedId]=statusSelect.value; store.responsibility[selectedId]=responsibilitySelect.value; store.verification[selectedId]=verificationSelect.value; store.verifiedDate[selectedId]=verifiedDate.value; addActivity(selectedId,"Asset Status",`${statusSelect.value} · ${verificationSelect.value}${verifiedDate.value?" · verified "+verifiedDate.value:""}`,todayStamp()); saveStore(); selectItem(selectedId);
+});
+document.getElementById("addWO").addEventListener("click",()=>{
+  const input=document.getElementById("woText"); const text=input.value.trim(); if(!text) return;
+  (store.workorders[selectedId] ||= []).push({text,status:"Open",created:todayStamp(),createdTs:nowStamp(),closed:""}); addActivity(selectedId,"Work Order",`Created: ${text}`,todayStamp()); input.value=""; saveStore(); renderWorkOrders(); renderAssetSummary(); renderTimeline();
+});
+document.getElementById("saveNotes").addEventListener("click",()=>{
+  store.notes[selectedId]=notesBox.value; store.noteUpdated[selectedId]=nowStamp(); addActivity(selectedId,"Notes","Asset notes updated",todayStamp()); saveStore(); renderAssetSummary(); renderTimeline();
+  const m=document.getElementById("savedMsg"); m.textContent="Saved"; setTimeout(()=>m.textContent="",1200);
+});
+
+document.getElementById("addMaint").addEventListener("click",()=>{
+  const text=document.getElementById("maintText").value.trim(); if(!text) return;
+  const date=document.getElementById("maintDate").value;
+  (store.maintenance[selectedId] ||= []).push({date:date||todayStamp(),text,ts:nowStamp()}); addActivity(selectedId,"Maintenance",text,date||todayStamp());
+  document.getElementById("maintText").value=""; saveStore(); renderMaintenance(); renderAssetSummary(); renderTimeline();
+});
+
+document.getElementById("addDoc").addEventListener("click",()=>{
+  const label=document.getElementById("docLabel").value.trim();
+  const link=document.getElementById("docLink").value.trim();
+  if(!label && !link) return;
+  (store.docs[selectedId] ||= []).push({label:label||"Reference",link,added:todayStamp(),ts:nowStamp()}); addActivity(selectedId,"Document / Photo",label||"Reference",todayStamp());
+  document.getElementById("docLabel").value=""; document.getElementById("docLink").value="";
+  saveStore(); renderDocs(); renderAssetSummary(); renderTimeline();
+});
+
+function nextFieldAssetId(type){
+  const prefix=({"Irrigation Controller":"IC","Water Meter / Backflow Assembly":"WB","Storm Catch Basin / Inlet":"CB","Storm Manhole / Structure":"SM","Storm Outlet / Discharge":"SO","Sanitary Manhole / Cleanout":"SAN","Exterior / Site Light":"LT","Mailbox / Cluster Box":"MB","Traffic / Property Sign":"SG","Road / Drive / Parking Surface":"PV","Sidewalk / Concrete":"SW","Drainage Swale / Culvert":"DR","Retaining Wall / Landscape Structure":"RW","Tree / Landscape Asset":"TR","Building Exterior Component":"BE","Other Field Asset":"FA"})[type]||"FA";
+  let n=1; while(items.some(i=>i.assetId===`${prefix}-${String(n).padStart(2,"0")}`)) n++; return `${prefix}-${String(n).padStart(2,"0")}`;
+}
+function markerForType(type){return ({"Irrigation Controller":"C","Water Meter / Backflow Assembly":"M","Storm Catch Basin / Inlet":"D","Storm Manhole / Structure":"S","Storm Outlet / Discharge":"O","Sanitary Manhole / Cleanout":"S","Exterior / Site Light":"L","Mailbox / Cluster Box":"B","Traffic / Property Sign":"S","Road / Drive / Parking Surface":"P","Sidewalk / Concrete":"W","Drainage Swale / Culvert":"D","Retaining Wall / Landscape Structure":"R","Tree / Landscape Asset":"T","Building Exterior Component":"B","Other Field Asset":"A"})[type]||"A"}
+function cancelPlacement(){placementPending=false;document.body.classList.remove("placement-on");cancelPlaceBtn.style.display="none";placementMsg.style.display="none";}
+let fieldMode=false,movingSelectedAsset=false;
+function fieldMessage(msg){const el=document.getElementById("fieldModeMsg");el.textContent=msg;el.style.display="block";}
+document.getElementById("fieldModeToggle").addEventListener("click",()=>{fieldMode=!fieldMode;document.body.classList.toggle("field-mode",fieldMode);document.getElementById("fieldModePanel").style.display=fieldMode?"block":"none";document.getElementById("fieldModeToggle").textContent=fieldMode?"Exit Field Mode":"Enter Field Mode";if(fieldMode)fieldMessage("Select a mapped asset to verify it, correct its position, or add a newly found asset.");else movingSelectedAsset=false;});
+document.getElementById("verifySelectedToday").addEventListener("click",()=>{if(!selectedId){fieldMessage("Select an asset first.");return;}store.verification[selectedId]="Field Verified";store.verifiedDate[selectedId]=new Date().toISOString().slice(0,10);saveStore();renderDetails();renderHotspots();renderMappingQueue();fieldMessage(`${displayAssetId(itemById(selectedId))} marked Field Verified today.`);});
+document.getElementById("moveSelectedAsset").addEventListener("click",()=>{if(!selectedId){fieldMessage("Select the asset you physically located first.");return;}movingSelectedAsset=true;fieldMessage("Click the corrected physical location on the map.");});
+stage.addEventListener("click",(e)=>{if(!fieldMode||!movingSelectedAsset||!selectedId||e.target.closest(".hotspot"))return;const rect=stage.getBoundingClientRect(),item=itemById(selectedId);item.x=Math.max(0,Math.min(100,((e.clientX-rect.left)/rect.width)*100));item.y=Math.max(0,Math.min(100,((e.clientY-rect.top)/rect.height)*100));store.verification[selectedId]="Field Verified";store.verifiedDate[selectedId]=new Date().toISOString().slice(0,10);store.profiles[selectedId]=store.profiles[selectedId]||{};store.profiles[selectedId].fieldLocated=true;store.profiles[selectedId].fieldLocatedAt=new Date().toISOString();saveStore();movingSelectedAsset=false;renderHotspots();renderDetails();renderMappingQueue();fieldMessage(`${displayAssetId(item)} location corrected and Field Verified.`);e.stopPropagation();},true);
+
+let fieldClickPoint=null;
+const fieldAssetDialog=document.getElementById("fieldAssetDialog");
+const fieldAssetForm=document.getElementById("fieldAssetForm");
+const fieldAssetType=document.getElementById("fieldAssetType");
+const fieldAssetLabel=document.getElementById("fieldAssetLabel");
+const fieldAssetLocation=document.getElementById("fieldAssetLocation");
+const fieldAssetCondition=document.getElementById("fieldAssetCondition");
+const fieldAssetNotes=document.getElementById("fieldAssetNotes");
+const fieldCoords=document.getElementById("fieldCoords");
+
+function openFieldAssetAt(x,y){
+  fieldClickPoint={x:+x.toFixed(2),y:+y.toFixed(2),layer:currentLayer};
+  fieldAssetType.value=currentLayer==="storm"?"Storm Catch Basin / Inlet":currentLayer==="sanitary"?"Sanitary Manhole / Cleanout":"Zone Valve";
+  fieldAssetLabel.value=""; fieldAssetLocation.value=""; fieldAssetCondition.value="Normal"; fieldAssetNotes.value="";
+  fieldCoords.textContent=`${currentLayer} layer · map position ${fieldClickPoint.x}%, ${fieldClickPoint.y}%`;
+  fieldAssetDialog.showModal();
+  setTimeout(()=>fieldAssetType.focus(),0);
+}
+document.getElementById("closeFieldAsset").addEventListener("click",()=>fieldAssetDialog.close());
+document.getElementById("cancelFieldAsset").addEventListener("click",()=>fieldAssetDialog.close());
+
+fieldAssetForm.addEventListener("submit",ev=>{
+  ev.preventDefault();
+  if(!fieldClickPoint) return;
+  const type=fieldAssetType.value;
+  const assetId=nextFieldAssetId(type);
+  const label=fieldAssetLabel.value.trim() || assetId;
+  const item={id:`CUSTOM_${Date.now()}`,assetId,label,type,cat:"field",marker:markerForType(type),
+    x:fieldClickPoint.x,y:fieldClickPoint.y,
+    location:fieldAssetLocation.value.trim()||"Field-mapped location",
+    measurements:"Field verified / added in Field Mode",
+    system:fieldClickPoint.layer==="storm"?"Storm Sewer":fieldClickPoint.layer==="sanitary"?"Sanitary Sewer":fieldClickPoint.layer==="irrigation"?"Irrigation":"Property",
+    layer:fieldClickPoint.layer,source:"Field mapped in Living Property Map"};
+  store.customItems.push(item); items.push(item);
+  store.verification[item.id]="Field Verified";
+  store.verifiedDate[item.id]=todayStamp();
+  store.status[item.id]=fieldAssetCondition.value;
+  if(fieldAssetNotes.value.trim()){store.notes[item.id]=fieldAssetNotes.value.trim();store.noteUpdated[item.id]=todayStamp();}
+  addActivity(item.id,"Asset Created",`${assetId} added in Field Mode`,todayStamp());
+  saveStore(); fieldAssetDialog.close(); fieldClickPoint=null;
+  renderMappingQueue();renderSearch();renderHotspots();selectItem(item.id);
+  fieldMessage(`${assetId} saved and Field Verified.`);
+});
+
+// In Field Mode, tapping blank map space begins new-asset creation.
+// Correct-location mode takes precedence.
+stage.addEventListener("click",ev=>{
+  if(!fieldMode || movingSelectedAsset || placementPending) return;
+  if(ev.target.closest && ev.target.closest(".hotspot")) return;
+  const rect=mapImage.getBoundingClientRect();
+  const x=((ev.clientX-rect.left)/rect.width)*100, y=((ev.clientY-rect.top)/rect.height)*100;
+  if(x<0||x>100||y<0||y>100) return;
+  openFieldAssetAt(x,y);
+  ev.stopPropagation();
+},true);
+
+document.getElementById("jumpAddFieldAsset").addEventListener("click",()=>{
+  fieldMessage("Tap the actual asset location on the map. The asset form will open there.");
+});
+
+// Access & Security permission framework.
+const securityDialog=document.getElementById("securityDialog");
+const securityUsers=document.getElementById("securityUsers");
+function renderSecurityUsers(){
+  securityUsers.innerHTML=store.securityUsers.length
+    ? store.securityUsers.map((u,i)=>`<div class="security-user"><b>${escapeHtml(u.name)} · ${escapeHtml(u.role)}</b>${escapeHtml(u.email)}<br><span class="muted">${Object.entries(u.permissions||{}).filter(([,v])=>v).map(([k])=>k).join(" · ")||"View only"}</span></div>`).join("")
+    : '<div class="muted" style="margin-top:10px">No additional users configured yet.</div>';
+}
+document.getElementById("openSecurity").addEventListener("click",()=>{renderSecurityUsers();securityDialog.showModal();});
+document.getElementById("closeSecurity").addEventListener("click",()=>securityDialog.close());
+document.getElementById("cancelSecurity").addEventListener("click",()=>securityDialog.close());
+document.getElementById("securityRole").addEventListener("change",ev=>{
+  const role=ev.target.value;
+  document.querySelectorAll("[data-perm]").forEach(cb=>{
+    if(role==="Viewer") cb.checked=false;
+    else if(role==="Administrator") cb.checked=true;
+    else cb.checked=["addAssets","editAssets","fieldVerify","maintenance","workOrders","photosNotes"].includes(cb.dataset.perm);
+  });
+});
+document.getElementById("securityForm").addEventListener("submit",ev=>{
+  ev.preventDefault();
+  const name=document.getElementById("securityName").value.trim(),email=document.getElementById("securityEmail").value.trim();
+  if(!name||!email)return;
+  const permissions={};document.querySelectorAll("[data-perm]").forEach(cb=>permissions[cb.dataset.perm]=cb.checked);
+  store.securityUsers.push({name,email,role:document.getElementById("securityRole").value,permissions,created:nowStamp()});
+  saveStore();renderSecurityUsers();
+  document.getElementById("securityName").value="";document.getElementById("securityEmail").value="";
+});
+
+placeAssetBtn.addEventListener("click",()=>{if(!newAssetLabel.value.trim()){placementMsg.textContent="Enter an asset label first.";placementMsg.style.display="block";return;} placementPending=true;document.body.classList.add("placement-on");cancelPlaceBtn.style.display="inline-block";placementMsg.style.display="block";placementMsg.textContent=`Click the exact location on the ${currentLayer} drawing to place this asset.`;});
+cancelPlaceBtn.addEventListener("click",cancelPlacement);
+stage.addEventListener("click",ev=>{
+  if(!placementPending) return; if(ev.target.closest && ev.target.closest('.hotspot')) return;
+  const rect=mapImage.getBoundingClientRect(); const x=((ev.clientX-rect.left)/rect.width)*100, y=((ev.clientY-rect.top)/rect.height)*100; if(x<0||x>100||y<0||y>100)return;
+  const type=newAssetType.value, assetId=nextFieldAssetId(type); const item={id:`CUSTOM_${Date.now()}`,assetId,label:newAssetLabel.value.trim(),type,cat:"field",marker:markerForType(type),x:+x.toFixed(2),y:+y.toFixed(2),location:newAssetLocation.value.trim()||"Field mapped location",measurements:"Field verified / added by map user",system:currentLayer==="storm"?"Storm Sewer":currentLayer==="sanitary"?"Sanitary Sewer":currentLayer==="irrigation"?"Irrigation":"Property",layer:currentLayer,source:"Field mapped in Living Property Map"};
+  store.customItems.push(item);items.push(item);store.verification[item.id]="Field Verified";store.verifiedDate[item.id]=todayStamp();addActivity(item.id,"Asset Created",`${assetId} added to ${currentLayer} map`,todayStamp());saveStore();newAssetLabel.value="";newAssetLocation.value="";cancelPlacement();renderMappingQueue();renderSearch();renderHotspots();selectItem(item.id);
+});
+
+document.getElementById("saveProfile").addEventListener("click",()=>{
+  store.profiles[selectedId]={criticality:criticalitySelect.value,installYear:installYear.value.trim(),manufacturer:manufacturer.value.trim(),model:model.value.trim(),serial:serial.value.trim(),serviceLife:serviceLife.value,lastInspection:lastInspection.value,nextInspection:nextInspection.value,accessInfo:accessInfo.value.trim(),replacementPlan:replacementPlan.value.trim(),updated:nowStamp()};
+  addActivity(selectedId,"Asset Profile","Life-cycle / inspection profile updated",todayStamp()); saveStore(); selectItem(selectedId);
+});
+document.getElementById("addRelation").addEventListener("click",()=>{
+  if(!relationAsset.value) return; const arr=(store.relationships[selectedId] ||= []); if(arr.some(r=>r.target===relationAsset.value && r.type===relationType.value)) return; arr.push({target:relationAsset.value,type:relationType.value,date:todayStamp(),ts:nowStamp()}); addActivity(selectedId,"Asset Relationship",`${relationType.value}: ${displayAssetId(itemById(relationAsset.value))}`,todayStamp()); saveStore(); renderRelations(); renderTimeline();
+});
+
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="BPP_Living_Property_Map_Data.json"; a.click(); URL.revokeObjectURL(a.href);
+});
+
+document.getElementById("importFile").addEventListener("change",ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{try{store=JSON.parse(r.result); store.notes ||= {}; store.noteUpdated ||= {}; store.maintenance ||= {}; store.docs ||= {}; store.status ||= {}; store.responsibility ||= {}; store.workorders ||= {}; store.verification ||= {}; store.verifiedDate ||= {}; store.activity ||= {}; store.profiles ||= {}; store.relationships ||= {}; store.customItems ||= []; localStorage.setItem("bppUtilityMapData",JSON.stringify(store)); alert("Map data imported. The map will reload to apply custom assets."); location.reload();}catch(e){alert("That file is not valid map-data JSON.");}};
+  r.readAsText(f);
+});
+
+mapImage.src=images.irrigation;
+renderHotspots(); renderSearch(); renderMappingQueue(); selectItem("Z23"); updateCounters();
+</script>
+
+<dialog id="fieldAssetDialog" class="field-dialog">
+  <form method="dialog" id="fieldAssetForm">
+    <div class="field-dialog-hd">
+      <div><b>What did you find here?</b><small id="fieldCoords"></small></div>
+      <button type="button" class="btn" id="closeFieldAsset">×</button>
+    </div>
+    <div class="field-dialog-bd">
+      <label>Asset type
+        <select id="fieldAssetType">
+          <option>Zone Valve</option>
+          <option>Gate / Isolation Valve</option>
+          <option>Hydrant</option>
+          <option>Pressure Riser</option>
+          <option>Manhole</option>
+          <option>Main Shut-Off Valve</option>
+          <option>Irrigation Controller</option>
+          <option>Water Meter / Backflow Assembly</option>
+          <option>Storm Catch Basin / Inlet</option>
+          <option>Storm Manhole / Structure</option>
+          <option>Storm Outlet / Discharge</option>
+          <option>Sanitary Manhole / Cleanout</option>
+          <option>Exterior / Site Light</option>
+          <option>Mailbox / Cluster Box</option>
+          <option>Traffic / Property Sign</option>
+          <option>Road / Drive / Parking Surface</option>
+          <option>Sidewalk / Concrete</option>
+          <option>Drainage Swale / Culvert</option>
+          <option>Retaining Wall / Landscape Structure</option>
+          <option>Tree / Landscape Asset</option>
+          <option>Building Exterior Component</option>
+          <option>Other Field Asset</option>
+        </select>
+      </label>
+      <label>Label / identifier
+        <input id="fieldAssetLabel" placeholder="Example: Light 4, MH-2, Valve 47">
+      </label>
+      <label>Location note
+        <input id="fieldAssetLocation" placeholder="Example: east of Unit 74">
+      </label>
+      <label>Condition
+        <select id="fieldAssetCondition"><option>Normal</option><option>Watch</option><option>Needs Attention</option><option>Out of Service</option></select>
+      </label>
+      <label class="wide-field">Field notes
+        <textarea id="fieldAssetNotes" placeholder="Access details, what it serves, measurements, observations…"></textarea>
+      </label>
+    </div>
+    <div class="field-dialog-actions">
+      <button type="button" class="btn" id="cancelFieldAsset">Cancel</button>
+      <button type="submit" class="btn primary">Save Field Asset</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="securityDialog" class="field-dialog security-dialog">
+  <form method="dialog" id="securityForm">
+    <div class="field-dialog-hd">
+      <div><b>Access & Security</b><small>User roles and privilege plan</small></div>
+      <button type="button" class="btn" id="closeSecurity">×</button>
+    </div>
+    <div class="security-note"><b>Important:</b> this screen defines the permission model. True sign-in and server enforcement will activate when the shared backend is connected. Until then, data remains local to this browser.</div>
+    <div class="field-dialog-bd">
+      <label>Name<input id="securityName" placeholder="User name"></label>
+      <label>Email<input id="securityEmail" type="email" placeholder="name@example.com"></label>
+      <label>Role<select id="securityRole"><option>Editor / Contractor</option><option>Viewer</option><option>Administrator</option></select></label>
+      <div class="wide-field permissions-grid">
+        <label><input type="checkbox" data-perm="addAssets" checked> Add assets</label>
+        <label><input type="checkbox" data-perm="editAssets" checked> Edit assets</label>
+        <label><input type="checkbox" data-perm="fieldVerify" checked> Field verify / move locations</label>
+        <label><input type="checkbox" data-perm="maintenance" checked> Maintenance & service records</label>
+        <label><input type="checkbox" data-perm="workOrders" checked> Work orders</label>
+        <label><input type="checkbox" data-perm="photosNotes" checked> Photos / notes</label>
+        <label><input type="checkbox" data-perm="exportData"> Export data</label>
+        <label><input type="checkbox" data-perm="importData"> Import data</label>
+        <label><input type="checkbox" data-perm="deleteAssets"> Delete assets</label>
+      </div>
+    </div>
+    <div class="field-dialog-actions">
+      <button type="button" class="btn" id="cancelSecurity">Cancel</button>
+      <button type="submit" class="btn primary">Save User</button>
+    </div>
+    <div class="security-users" id="securityUsers"></div>
+  </form>
+</dialog>
+
+</body>
+</html>
