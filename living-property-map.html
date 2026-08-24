@@ -882,7 +882,14 @@ document.getElementById("zoomReset").addEventListener("click",()=>{zoom=1;stage.
 document.getElementById("printBtn").addEventListener("click",()=>window.print());
 
 document.getElementById("saveStatus").addEventListener("click",()=>{
-  store.status[selectedId]=statusSelect.value; store.responsibility[selectedId]=responsibilitySelect.value; store.verification[selectedId]=verificationSelect.value; store.verifiedDate[selectedId]=verifiedDate.value; addActivity(selectedId,"Asset Status",`${statusSelect.value} · ${verificationSelect.value}${verifiedDate.value?" · verified "+verifiedDate.value:""}`,todayStamp()); saveStore(); selectItem(selectedId);
+  store.status[selectedId]=statusSelect.value;
+  store.responsibility[selectedId]=responsibilitySelect.value;
+  store.verification[selectedId]=verificationSelect.value;
+  store.verifiedDate[selectedId]=verifiedDate.value;
+  addActivity(selectedId,"Asset Status",`${statusSelect.value} · ${verificationSelect.value}${verifiedDate.value?" · verified "+verifiedDate.value:""}`,todayStamp());
+  saveStore();
+  renderHotspots();
+  selectItem(selectedId);
 });
 document.getElementById("addWO").addEventListener("click",()=>{
   const input=document.getElementById("woText"); const text=input.value.trim(); if(!text) return;
