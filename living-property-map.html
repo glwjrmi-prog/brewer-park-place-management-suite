@@ -33,6 +33,15 @@ header h1{margin:0;font-size:23px} header small{display:block;color:#5ee0b8;font
 .result:hover{background:#f5f9fc}
 .result b{display:block;font-size:13px} .result span{font-size:12px;color:var(--muted)}
 .zoomrow{display:flex;gap:6px} .zoomrow .btn{flex:1;padding:8px}
+  .map-zoom-controls{
+  display:flex;
+  justify-content:center;
+  gap:8px;
+  padding:10px;
+  background:#fff;
+  border-top:1px solid var(--border);
+}
+.map-zoom-controls .btn{min-width:70px}
 .map-wrap{overflow:auto;padding:12px;background:#dfe5e9}
 .notice{display:none;margin-bottom:9px;padding:9px 10px;background:#fff7d8;border:1px solid #ebd783;border-radius:7px;font-size:13px}
 .stage{position:relative;margin:auto;width:100%;max-width:1100px;background:white;box-shadow:0 1px 5px rgba(0,0,0,.16)}
@@ -196,6 +205,11 @@ body.field-mode .map-wrap{outline:4px solid #f0b429;outline-offset:-4px} body.fi
       <img id="mapImage" alt="Brewer Park Place map">
       <div id="hotspotLayer"></div>
     </div>
+    <div class="map-zoom-controls">
+  <button class="btn" id="zoomOut">−</button>
+  <button class="btn" id="zoomReset">100%</button>
+  <button class="btn" id="zoomIn">+</button>
+</div>
   </main>
 
   <aside class="details">
@@ -876,9 +890,26 @@ document.querySelectorAll(".layerTab").forEach(t=>t.addEventListener("click",()=
 ["showZones","showGates","showHydrants","showPressure"].forEach(id=>document.getElementById(id).addEventListener("change",syncFilters));
 searchBox.addEventListener("input",renderSearch);
 
-document.getElementById("zoomIn").addEventListener("click",()=>{zoom=Math.min(1.8,zoom+.1);stage.style.maxWidth=(1100*zoom)+"px";});
-document.getElementById("zoomOut").addEventListener("click",()=>{zoom=Math.max(.7,zoom-.1);stage.style.maxWidth=(1100*zoom)+"px";});
-document.getElementById("zoomReset").addEventListener("click",()=>{zoom=1;stage.style.maxWidth="1100px";});
+function applyZoom(){
+  stage.style.width=(zoom*100)+"%";
+  stage.style.maxWidth="none";
+  document.getElementById("zoomReset").textContent=Math.round(zoom*100)+"%";
+}
+
+document.getElementById("zoomIn").addEventListener("click",()=>{
+  zoom=Math.min(2.5,zoom+.25);
+  applyZoom();
+});
+
+document.getElementById("zoomOut").addEventListener("click",()=>{
+  zoom=Math.max(.5,zoom-.25);
+  applyZoom();
+});
+
+document.getElementById("zoomReset").addEventListener("click",()=>{
+  zoom=1;
+  applyZoom();
+});
 document.getElementById("printBtn").addEventListener("click",()=>window.print());
 
 document.getElementById("saveStatus").addEventListener("click",()=>{
