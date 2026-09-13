@@ -789,6 +789,12 @@ function accessShowSetup(message=""){
   };
   setTimeout(()=>document.getElementById("accessSetupName")?.focus(),50);
 }
+function accessShowCloudKeyRequired(){
+  const body=`<div class="bppAccessNotice"><b>Cloud access is required on this device.</b><br>The shared Management Suite access key is no longer stored in the public website code. Enter the current private key once on this device to load the authorized-user list and shared records.</div>
+    <p class="bppAccessHint">The key is stored only in this browser's local storage. Do not place it in GitHub, email templates, or public documents.</p>`;
+  accessOverlay("Cloud Access Required","Brewer Park Place Management Suite",body,`<button id="accessCloudKeyBtn">Configure Cloud Access</button>`);
+  document.getElementById("accessCloudKeyBtn").onclick=()=>{accessRemoveOverlay();bppOpenCloudTools();};
+}
 function accessShowLogin(message=""){
   const users=accessActiveUsers();
   if(!users.length)return accessShowSetup(message);
@@ -897,9 +903,11 @@ function auditChangeUser(){accessShowAccount()}
 async function auditStartSession(){
   localStorage.removeItem(AUDIT_USER_KEY);
   sessionStorage.removeItem("BPPMS_SESSION_USER"); // remove v8.15 name-only session identity
+  if(!cloudToken() && !accessActiveUsers().length){accessShowCloudKeyRequired();return;}
   await accessSyncProfilesFromCloud();
   if(accessCurrentUserRecord())return;
   if(accessActiveUsers().length)accessShowLogin();
+  else if(!cloudToken())accessShowCloudKeyRequired();
   else accessShowSetup();
 }
 
@@ -953,7 +961,13 @@ inspections:{label:"Inspections",fields:[["inspectionId","Inspection ID","text"]
 projects:{label:"Projects",fields:[["project","Project","text",true],["status","Status","select",false,["Planning","Bidding","Board Review","Approved","In Progress","On Hold","Complete","Cancelled"]],["boardApprovalDate","Board Approval Date","date"],["startDate","Start Date","date"],["targetCompletion","Target Completion","date"],["completionDate","Completion Date","date"],["fundingSource","Funding Source","select",false,["Operating Budget","Reserve Fund","Special Assessment","Insurance","Other"]],["budget","Approved Budget","number"],["actual","Actual Cost","number"],["progress","Progress %","number"],["leadVendor","Lead Vendor","vendorSelect"],["linkedWorkOrders","Linked Work Orders","text"],["documentFolderUrl","Google Drive Folder Link","text","wide"],["description","Project Scope / Description","textarea","wide"],["nextMilestone","Next Milestone / Action","textarea","wide"],["risks","Risks / Issues","textarea","wide"],["notes","Progress / Completion Notes","textarea","wide"]],defaults:{status:"Planning",progress:"0",fundingSource:"Operating Budget"}}
 };
 const CLOUD_URL="https://bpp-management-suite-sync.glwjrmi.workers.dev";
-const CLOUD_TOKEN="GAfdLV6MYZLhIxF3MdzOsTvEV_xETHxO3oJ6JWSw2Ls";
+const CLOUD_TOKEN_KEY="BPPMS_CLOUD_TOKEN";
+function cloudToken(){return String(localStorage.getItem(CLOUD_TOKEN_KEY)||"").trim()}
+function cloudRequireToken(){
+  const token=cloudToken();
+  if(!token) throw new Error("Cloud access key is not configured on this device. Open Backup & Cloud Tools → Cloud Access.");
+  return token;
+}
 const CLOUD_DEVICE_KEY="BPPMS_CLOUD_DEVICE_ID";
 const CLOUD_SETUP_KEY="BPPMS_V75_CLOUD_SETUP";
 const CLOUD_SAFETY_KEY="BPPMS_PRE_CLOUD_V75_SAFETY_COPY";
@@ -982,14 +996,14 @@ function cloudMarkSynced(data=state){
 function cloudTimeLabel(ts){if(!ts)return"not yet saved";try{return new Date(ts).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}catch{return"saved"}}
 let cloudSaveTimer=null;
 let cloudBusy=false;
-let cloudLastStatus=localStorage.getItem(CLOUD_SETUP_KEY)?"Cloud connected":"Cloud not connected";
+let cloudLastStatus=cloudIsSetup()?"Cloud connected":(cloudToken()?"Cloud access key set":"Cloud access key required");
 
 function getDeviceId(){
   let id=localStorage.getItem(CLOUD_DEVICE_KEY);
   if(!id){id="dev-"+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem(CLOUD_DEVICE_KEY,id)}
   return id;
 }
-function cloudIsSetup(){return localStorage.getItem(CLOUD_SETUP_KEY)==="1"}
+function cloudIsSetup(){return localStorage.getItem(CLOUD_SETUP_KEY)==="1" && !!cloudToken()}
 function setCloudStatus(text,kind=""){
       cloudLastStatus=text;
       const el=document.getElementById("cloudSyncStatus");
@@ -1030,7 +1044,8 @@ function saveState(){
   }
 }
 async function cloudFetch(){
-  const r=await fetch(CLOUD_URL+"?token="+encodeURIComponent(CLOUD_TOKEN),{method:"GET",cache:"no-store"});
+  const token=cloudRequireToken();
+  const r=await fetch(CLOUD_URL,{method:"GET",headers:{"Authorization":"Bearer "+token},cache:"no-store"});
   if(!r.ok) throw new Error("Cloud read failed ("+r.status+")");
   const j=await r.json();
   if(!j.ok) throw new Error(j.error||"Cloud read failed");
@@ -1040,7 +1055,8 @@ class CloudConflictError extends Error{
   constructor(remote){super("Newer cloud changes detected.");this.name="CloudConflictError";this.remote=remote}
 }
 async function cloudPostUnsafe(){
-  const r=await fetch(CLOUD_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD_TOKEN,data:state})});
+  const token=cloudRequireToken();
+  const r=await fetch(CLOUD_URL,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({data:state})});
   if(!r.ok) throw new Error("Cloud save failed ("+r.status+")");
   const j=await r.json();
   if(!j.ok) throw new Error(j.error||"Cloud save failed");
@@ -2004,6 +2020,13 @@ function bppOpenCloudTools(){
         <div class="bppBackupOk">${esc(autoBackupStatusText())}</div>
         <div class="bppToolsNote">The Suite automatically keeps up to ${AUTO_BACKUP_KEEP} daily browser snapshots on this device. Cloud Sync continues automatically in the background.</div>
       </div>
+      <div class="bppToolsSection"><h4>Cloud Access</h4>
+        <div class="bppToolsNote"><b>${cloudToken()?"Private access key stored on this device.":"No private cloud access key is stored on this device."}</b><br>The key is saved only in this browser and is never written into GitHub or exported with Management Suite records.</div>
+        <label style="display:grid;gap:5px;margin-top:10px;font-size:12px;font-weight:800">Cloud access key
+          <input id="bppCloudTokenInput" type="password" autocomplete="off" placeholder="${cloudToken()?"Enter a replacement key to change it":"Enter the private cloud access key"}" style="width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit">
+        </label>
+        <div class="bppToolsActions"><button id="bppCloudTokenSave">Save Access Key</button>${cloudToken()?'<button class="secondary" id="bppCloudTokenClear">Clear Key From This Device</button>':""}</div>
+      </div>
       <div class="bppToolsSection"><h4>Copyright & License</h4>
         <div class="bppToolsNote">© 2026 Gordy Wheeler. All Rights Reserved. Licensed to Brewer Park Place Condominium Association for internal Association use.</div>
         <div class="bppToolsActions"><button id="bppViewLicense">View Copyright & License</button></div>
@@ -2027,6 +2050,23 @@ function bppOpenCloudTools(){
   </div>`;
   document.body.appendChild(o);
   document.getElementById("bppToolsClose").onclick=bppCloseTools;
+  document.getElementById("bppCloudTokenSave").onclick=async()=>{
+    const input=document.getElementById("bppCloudTokenInput");
+    const token=String(input?.value||"").trim();
+    if(token.length<24){alert("Enter the complete private cloud access key.");return;}
+    localStorage.setItem(CLOUD_TOKEN_KEY,token);
+    cloudLastStatus=localStorage.getItem(CLOUD_SETUP_KEY)==="1"?"Cloud connected":"Cloud access key set";
+    bppCloseTools();
+    await syncCloudNow(true);
+  };
+  const clearCloudToken=document.getElementById("bppCloudTokenClear");
+  if(clearCloudToken)clearCloudToken.onclick=()=>{
+    if(!confirm("Clear the private cloud access key from this browser?\n\nLocal Management Suite data will remain on this device, but cloud sync will stop until the key is entered again."))return;
+    localStorage.removeItem(CLOUD_TOKEN_KEY);
+    cloudLastStatus="Cloud access key required";
+    setCloudStatus(cloudLastStatus,"warn");
+    bppOpenCloudTools();
+  };
   document.getElementById("bppViewLicense").onclick=()=>{bppCloseTools();bppOpenLicense()};
   document.getElementById("bppEditViolationTemplates").onclick=()=>{bppCloseTools();bppOpenTemplateEditor()};
   document.getElementById("bppExportBackup").onclick=()=>{markBackupCreated();download(`BPP_MS_v8_24_backup_${today()}.json`,JSON.stringify(state,null,2),"application/json");autoBackupRun(true);render();};
@@ -2037,7 +2077,8 @@ function bppOpenCloudTools(){
 }
 
 async function initCloudSync(){
-  if(!cloudIsSetup()){setCloudStatus("Cloud not connected","warn");return}
+  if(!cloudToken()){setCloudStatus("Cloud access key required","warn");return}
+  if(!cloudIsSetup()){setCloudStatus("Cloud access key set — setup required","warn");return}
   setCloudStatus("Cloud connected","ok");
 }function esc(v=""){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}function cls(v=""){return String(v||"").replaceAll(" ","")}function openish(x){return !["Closed","Complete","Cancelled","Resolved"].includes(String(x.status||""))}function textOf(o){return Object.values(o||{}).join(" ").toLowerCase()}function pill(v){return v?`<span class="pill ${cls(v)}">${esc(v)}</span>`:""}function money(v){const n=Number(v||0);return n?n.toLocaleString(undefined,{style:"currency","currency":"USD"}):"$0"}function today(){return new Date().toISOString().slice(0,10)}
 function render(){document.getElementById("app").innerHTML=shell();bindNav();if(activeView==="dashboard")renderDashboard();else if(activeView==="properties")renderPropertyRecords();else if(activeView==="vendors")renderVendorCenter();else if(["violations","maintenance","projects","inspections"].includes(activeView))renderCrudModule(activeView);else if(activeView==="knowledge")renderSimpleTable("knowledgeBase","Knowledge Base");else if(activeView==="report")renderReport();bindGlobalActions()}
