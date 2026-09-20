@@ -204,3 +204,51 @@
 
   console.info('BPP Management Suite v8.33 live Policy Advisor integration loaded.');
 })();
+
+/* Record ID generator hotfix — 2026-09-20
+   Use the highest existing sequence number for the current year rather than
+   record-count + 1. This prevents duplicate IDs after records are deleted or
+   when historical records are imported/recovered. No existing IDs are changed. */
+(function(){
+  'use strict';
+  if(window.__bppIdGeneratorHotfix) return;
+
+  const priorDefaultValue=window.defaultValue;
+  if(typeof priorDefaultValue!=='function'){
+    console.warn('BPP ID generator hotfix could not find defaultValue().');
+    return;
+  }
+
+  function nextSequenceId(records,field,prefix){
+    const year=new Date().getFullYear();
+    const re=new RegExp('^'+prefix+'-'+year+'-(\\d+)$','i');
+    let max=0;
+    for(const rec of (records||[])){
+      const match=String(rec?.[field]||'').trim().match(re);
+      if(match) max=Math.max(max,Number(match[1])||0);
+    }
+    return `${prefix}-${year}-${String(max+1).padStart(3,'0')}`;
+  }
+
+  window.defaultValue=function(key,name){
+    try{
+      if(typeof state!=='undefined' && state){
+        if(key==='maintenance' && name==='id'){
+          return nextSequenceId(state.maintenance,'id','WO');
+        }
+        if(key==='inspections' && name==='inspectionId'){
+          return nextSequenceId(state.inspections,'inspectionId','INSP');
+        }
+        if(key==='violations' && name==='caseId'){
+          return nextSequenceId(state.violations,'caseId','VL');
+        }
+      }
+    }catch(err){
+      console.warn('BPP ID generator hotfix fallback:',err);
+    }
+    return priorDefaultValue(key,name);
+  };
+
+  window.__bppIdGeneratorHotfix=true;
+  console.info('BPP record ID generator hotfix loaded.');
+})();
