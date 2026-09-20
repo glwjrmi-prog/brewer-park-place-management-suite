@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Brewer Park Place Management Suite — Full D1 Staging</title>
+  <style>
+    body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#eef3ef;color:#173a29}
+    .loading{min-height:100vh;display:grid;place-items:center;padding:24px}
+    .card{background:#fff;border:1px solid #d6e0da;border-radius:18px;padding:24px;max-width:680px;box-shadow:0 14px 32px rgba(20,42,30,.09)}
+    h1{margin:0 0 8px}p{line-height:1.5}.err{color:#ad3e3e;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <div class="loading"><div class="card"><h1>Brewer Park Place Management Suite</h1><p>Loading the full Management Suite with the protected D1 staging data layer…</p><div id="msg"></div></div></div>
+  <script>
+  (async()=>{
+    const msg=document.getElementById('msg');
+    // Pin the full Suite UI to the known-good main commit used for this staging build.
+    const source='https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/3c37610d2c9d85b25765ee54d2ed3253a91d041e/index.html';
+    try{
+      const [htmlRes,bridgeRes]=await Promise.all([
+        fetch(source,{cache:'no-store'}),
+        fetch('./authoritative-bridge.js',{cache:'no-store'})
+      ]);
+      if(!htmlRes.ok)throw new Error('Could not load the pinned full Management Suite ('+htmlRes.status+').');
+      if(!bridgeRes.ok)throw new Error('Could not load the protected-cloud bridge ('+bridgeRes.status+').');
+      const html=await htmlRes.text();
+      const bridge=(await bridgeRes.text()).replace(/<\/script/gi,'<\\/script');
+      const badge='<div id="bppV9SourceMarker" style="position:fixed;z-index:2147483000;right:12px;bottom:12px;background:#7b5a0b;color:#fff6d5;border:1px solid #d7b85c;border-radius:999px;padding:7px 11px;font:700 11px Segoe UI,Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)">FULL SUITE · D1 STAGING</div>';
+      const injected=html.replace('</body>',badge+'<script>'+bridge+'<\/script></body>');
+      document.open();document.write(injected);document.close();
+    }catch(e){
+      msg.className='err';
+      msg.textContent='Staging loader error: '+(e&&e.message?e.message:String(e));
+    }
+  })();
+  </script>
+</body>
+</html>
