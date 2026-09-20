@@ -19,17 +19,20 @@
     // Pin the full Suite UI to the known-good main commit used for this staging build.
     const source='https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/3c37610d2c9d85b25765ee54d2ed3253a91d041e/index.html';
     try{
-      const [htmlRes,bridgeRes,toolsPatchRes]=await Promise.all([
+      const [htmlRes,bridgeRes,toolsPatchRes,drivePatchRes]=await Promise.all([
         fetch(source,{cache:'no-store'}),
         fetch('./authoritative-bridge.js',{cache:'no-store'}),
-        fetch('./tools-ui-patch.js',{cache:'no-store'})
+        fetch('./tools-ui-patch.js',{cache:'no-store'}),
+        fetch('./drive-picker-patch.js',{cache:'no-store'})
       ]);
       if(!htmlRes.ok)throw new Error('Could not load the pinned full Management Suite ('+htmlRes.status+').');
       if(!bridgeRes.ok)throw new Error('Could not load the protected-cloud bridge ('+bridgeRes.status+').');
       if(!toolsPatchRes.ok)throw new Error('Could not load the D1 backup-tools patch ('+toolsPatchRes.status+').');
+      if(!drivePatchRes.ok)throw new Error('Could not load the Drive Picker compatibility patch ('+drivePatchRes.status+').');
       const html=await htmlRes.text();
       const bridge=(await bridgeRes.text()).replace(/<\/script/gi,'<\\/script');
       const toolsPatch=(await toolsPatchRes.text()).replace(/<\/script/gi,'<\\/script');
+      const drivePatch=(await drivePatchRes.text()).replace(/<\/script/gi,'<\\/script');
       const compat=`
 (function(){
   // Some direct subviews (notably System Check, property detail, and vendor profile)
@@ -51,7 +54,7 @@
 })();
 `.replace(/<\/script/gi,'<\\/script');
       const badge='<div id="bppV9SourceMarker" style="position:fixed;z-index:2147483000;right:12px;bottom:12px;background:#7b5a0b;color:#fff6d5;border:1px solid #d7b85c;border-radius:999px;padding:7px 11px;font:700 11px Segoe UI,Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)">FULL SUITE · D1 STAGING</div>';
-      const injected=html.replace('</body>',badge+'<script>'+bridge+'<\/script><script>'+toolsPatch+'<\/script><script>'+compat+'<\/script></body>');
+      const injected=html.replace('</body>',badge+'<script>'+bridge+'<\/script><script>'+toolsPatch+'<\/script><script>'+drivePatch+'<\/script><script>'+compat+'<\/script></body>');
       document.open();document.write(injected);document.close();
     }catch(e){
       msg.className='err';
