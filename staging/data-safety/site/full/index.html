@@ -27,8 +27,28 @@
       if(!bridgeRes.ok)throw new Error('Could not load the protected-cloud bridge ('+bridgeRes.status+').');
       const html=await htmlRes.text();
       const bridge=(await bridgeRes.text()).replace(/<\/script/gi,'<\\/script');
+      const compat=`
+(function(){
+  // Some direct subviews (notably System Check, property detail, and vendor profile)
+  // render their own top bar without re-running the legacy global-action binder.
+  // Provide a safe delegated fallback for those buttons only when no direct handler exists.
+  document.addEventListener('click',function(e){
+    const tools=e.target&&e.target.closest?e.target.closest('#cloudToolsBtn'):null;
+    if(tools&&!tools.onclick&&typeof bppOpenCloudTools==='function'){
+      e.preventDefault();
+      bppOpenCloudTools();
+      return;
+    }
+    const about=e.target&&e.target.closest?e.target.closest('#aboutBtn'):null;
+    if(about&&!about.onclick&&typeof openAboutDialog==='function'){
+      e.preventDefault();
+      openAboutDialog();
+    }
+  });
+})();
+`.replace(/<\/script/gi,'<\\/script');
       const badge='<div id="bppV9SourceMarker" style="position:fixed;z-index:2147483000;right:12px;bottom:12px;background:#7b5a0b;color:#fff6d5;border:1px solid #d7b85c;border-radius:999px;padding:7px 11px;font:700 11px Segoe UI,Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)">FULL SUITE · D1 STAGING</div>';
-      const injected=html.replace('</body>',badge+'<script>'+bridge+'<\/script></body>');
+      const injected=html.replace('</body>',badge+'<script>'+bridge+'<\/script><script>'+compat+'<\/script></body>');
       document.open();document.write(injected);document.close();
     }catch(e){
       msg.className='err';
