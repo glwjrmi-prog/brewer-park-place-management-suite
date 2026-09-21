@@ -2,7 +2,7 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BPP Production D1 Bootstrap</title><style>body{font-family:Segoe UI,Arial,sans-serif;background:#eef3ef;color:#173a29;margin:0;padding:24px}.card{max-width:760px;margin:auto;background:#fff;border:1px solid #d6e0da;border-radius:18px;padding:22px;box-shadow:0 14px 32px rgba(20,42,30,.09)}label{display:grid;gap:6px;margin:12px 0;font-weight:700}input{padding:10px;border:1px solid #ccd7d0;border-radius:10px}button{border:0;border-radius:10px;background:#2d6b4a;color:#fff;padding:11px 14px;font-weight:800;cursor:pointer}.note{background:#fff9ea;border:1px solid #ead7a8;padding:10px;border-radius:10px;line-height:1.45}.ok{background:#f3fbf6;border:1px solid #b9dbc8;padding:10px;border-radius:10px;white-space:pre-wrap}.bad{background:#fff2f2;border:1px solid #e8bbbb;padding:10px;border-radius:10px;white-space:pre-wrap}</style></head>
 <body><div class="card"><h2>BPP Production D1 Bootstrap</h2><div class="note">Use only during the production cutover. Keys stay in this browser page and are not saved. Select the fresh JSON backup exported from the Management Suite.</div>
-<label>Production API URL<input id="api" value="https://bpp-management-suite-api.glwjrmi.workers.dev"></label>
+<label>Production API URL<input id="api" value="https://bpp-management-suite-production-api.glwjrmi.workers.dev"></label>
 <label>Production Access Token<input id="access" type="password" autocomplete="off"></label>
 <label>Production Admin Token<input id="admin" type="password" autocomplete="off"></label>
 <label>Backup JSON<input id="file" type="file" accept="application/json,.json"></label>
@@ -34,7 +34,7 @@ document.getElementById('go').onclick=async()=>{
     const raw=JSON.parse(await f.text());
     const data=clean(raw);
     const c=counts(data);
-    if(c.workOrders!==57||c.violations!==61||c.projects!==10||c.vendors!==40) throw new Error('Backup counts do not match the verified cutover baseline: '+JSON.stringify(c));
+    if(c.workOrders!==57||c.violations!==61||c.projects!==10||c.vendors!==40||c.inspections!==0||c.knowledgeBase!==4) throw new Error('Backup counts do not match the verified cutover baseline: '+JSON.stringify(c));
     out.className='note';out.textContent='Importing verified data…\n'+JSON.stringify(c,null,2);
     const r=await fetch(api+'/api/bootstrap',{method:'POST',headers:{'Authorization':'Bearer '+access,'X-Admin-Token':admin,'Content-Type':'application/json'},body:JSON.stringify({data,actor:'Gordy Wheeler',reason:'Production cutover import from verified D1 backup'})});
     const body=await r.json().catch(()=>({}));
@@ -43,6 +43,7 @@ document.getElementById('go').onclick=async()=>{
     const state=await check.json();
     if(!check.ok||!state.initialized) throw new Error('Production database initialized, but verification failed.');
     const vc=counts(state.data||{});
+    if(vc.workOrders!==57||vc.violations!==61||vc.projects!==10||vc.vendors!==40||vc.inspections!==0||vc.knowledgeBase!==4) throw new Error('Production verification counts do not match expected baseline: '+JSON.stringify(vc));
     out.className='ok';out.textContent='PRODUCTION D1 INITIALIZED SUCCESSFULLY\nRevision: '+state.revision+'\n'+JSON.stringify(vc,null,2)+'\n\nExpected baseline verified.';
   }catch(e){out.className='bad';out.textContent='STOP — nothing further should be deployed yet.\n'+(e&&e.message?e.message:String(e));}
 };
