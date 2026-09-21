@@ -3,7 +3,7 @@
   'use strict';
   function apply(){
     document.querySelectorAll('.versionBadge').forEach(el=>{
-      if(!el.textContent.includes('Version 9.0')) el.innerHTML='<b>Version 9.0</b><br>D1 Protected';
+      el.innerHTML='<b>Version 9.0</b>';
     });
     document.querySelectorAll('.sideNote').forEach(el=>{
       if(el.textContent.trim()==='Export backups regularly.') el.textContent='Protected cloud data · automatic revision safety';

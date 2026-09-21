@@ -34,15 +34,15 @@
         ['BPPMS_V9_STAGING_TOKEN','BPPMS_V9_PRODUCTION_TOKEN'],
         ['BPPMS_V9_CONFLICT_COPY_','BPPMS_V9_PROD_CONFLICT_COPY_'],
         ['BPPMS_V9_BLOCKED_COPY_','BPPMS_V9_PROD_BLOCKED_COPY_'],
-        ['D1 STAGING','D1 PROTECTED'],
+        ['D1 STAGING','Cloud'],
         ['Protected Cloud Staging','Protected Cloud'],
-        ['authoritative D1 staging database','authoritative D1 database'],
-        ['Authoritative staging database','Authoritative production database'],
+        ['authoritative D1 staging database','authoritative cloud database'],
+        ['Authoritative staging database','Authoritative cloud database'],
         ['protected staging key','protected production key'],
         ['staging key','production key'],
         ['Staging user','Authorized user'],
-        ['D1 Staging','D1 Protected'],
-        ['protected D1 staging','protected D1']
+        ['D1 Staging','Protected Cloud'],
+        ['protected D1 staging','protected cloud']
       ];
       for(const [a,b] of replacements) bridge=bridge.split(a).join(b);
       const escScript=s=>s.replace(/<\/script/gi,'<\\/script');
@@ -52,8 +52,7 @@
       const ui=escScript(await uiRes.text());
       bridge=escScript(bridge);
       const compat=escScript(`(function(){document.addEventListener('click',function(e){const tools=e.target&&e.target.closest?e.target.closest('#cloudToolsBtn'):null;if(tools&&!tools.onclick&&typeof bppOpenCloudTools==='function'){e.preventDefault();bppOpenCloudTools();return}const about=e.target&&e.target.closest?e.target.closest('#aboutBtn'):null;if(about&&!about.onclick&&typeof openAboutDialog==='function'){e.preventDefault();openAboutDialog();}});})();`);
-      const badge='<div id="bppD1ProtectedBadge" style="position:fixed;z-index:2147483000;right:12px;bottom:12px;background:#173a29;color:#fff;border:1px solid #7ba98e;border-radius:999px;padding:7px 11px;font:700 11px Segoe UI,Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2)">D1 PROTECTED</div>';
-      const injected=html.replace('</body>',badge+'<script>'+bridge+'<\/script><script>'+tools+'<\/script><script>'+drive+'<\/script><script>'+audit+'<\/script><script>'+ui+'<\/script><script>'+compat+'<\/script></body>');
+      const injected=html.replace('</body>','<script>'+bridge+'<\/script><script>'+tools+'<\/script><script>'+drive+'<\/script><script>'+audit+'<\/script><script>'+ui+'<\/script><script>'+compat+'<\/script></body>');
       document.open();document.write(injected);document.close();
     }catch(e){msg.className='err';msg.textContent='Management Suite startup error: '+(e&&e.message?e.message:String(e));}
   })();

@@ -1,5 +1,5 @@
-// Brewer Park Place Management Suite — D1 staging tools cleanup
-// Removes legacy browser-vs-cloud recovery choices from the normal user interface.
+// Brewer Park Place Management Suite — production backup/data-safety interface
+// Keeps technical storage details out of the normal board-member interface.
 (function(){
   'use strict';
 
@@ -25,14 +25,14 @@
       <div class="bppToolsBody">
         <div class="bppToolsSection">
           <h4>Protected Cloud Database</h4>
-          <div class="bppBackupOk">D1 authoritative cloud protection is active.</div>
-          <div class="bppToolsNote">The newest protected cloud revision is the source of truth. Older browser copies cannot silently overwrite newer board-member changes, and unexpected record loss is blocked.</div>
+          <div class="bppBackupOk">Protected cloud storage is active.</div>
+          <div class="bppToolsNote">The newest cloud revision is the source of truth. Older browser copies cannot silently overwrite newer board-member changes, and unexpected record loss is blocked.</div>
         </div>
 
         <div class="bppToolsSection">
           <h4>Automatic Browser Safety Copies</h4>
           <div class="bppBackupOk">${typeof esc==='function'?esc(backupStatus):backupStatus}</div>
-          <div class="bppToolsNote">This device can retain up to ${typeof esc==='function'?esc(keep):keep} daily browser snapshots as an additional recovery layer. These copies never take authority over D1.</div>
+          <div class="bppToolsNote">This device can retain up to ${typeof esc==='function'?esc(keep):keep} daily browser snapshots as an additional recovery layer. These copies never take authority over the protected cloud database.</div>
         </div>
 
         <div class="bppToolsSection">
