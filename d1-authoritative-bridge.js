@@ -106,7 +106,7 @@
 
   async function v9GetState(){return await v9Api('/api/state',{method:'GET'})}
 
-  async function v9Commit(nextState,reason='Record change',allowDestructive=false){
+  async function v9Commit(nextState,reason='Record change',allowDestructive=false,deleteIntent=null){
     if(!v9Ready||v9ReadOnly)throw new Error('Editing is disabled until the protected cloud is verified.');
     if(v9Busy)throw new Error('A protected cloud save is already in progress.');
     v9Busy=true;
@@ -114,6 +114,7 @@
     try{
       const headers={};
       const payload={baseRevision:v9Revision,data:nextState,actor:v9Actor(),reason};
+      if(deleteIntent)payload.deleteIntent=deleteIntent;
       if(allowDestructive){
         // Staging-only explicit-delete path. ACCESS_TOKEN and ADMIN_TOKEN are intentionally
         // the same staging key during validation. Production will use role-aware delete/archive controls.
@@ -136,7 +137,8 @@
       if(e.status===422&&e.body?.code==='INTEGRITY_BLOCK'){
         v9SaveSafety(V9_BLOCKED_PREFIX,nextState);
         v9Status('Save blocked by data-loss protection','warn');
-        alert('The protected cloud blocked this save because records would unexpectedly disappear.\n\nNo cloud data was overwritten.\n\n'+((e.body?.details||[]).join('\n')||e.message));
+        const friendly=(e.body?.details||[]).map(x=>String(x).replace(/^maintenance count/i,'Work order count').replace(/^violations count/i,'Violation count').replace(/^projects count/i,'Project count').replace(/^inspections count/i,'Inspection count').replace(/^vendors count/i,'Vendor count'));
+        alert('The protected cloud blocked this save because records would unexpectedly disappear.\n\nNo cloud data was overwritten.\n\n'+(friendly.join('\n')||e.message));
         try{v9ApplyRemote(await v9GetState())}catch{}
         return false;
       }
@@ -272,11 +274,12 @@
     const i=Number(idx),rows=Array.isArray(state[key])?state[key]:[];
     const rec=rows[i];if(!rec)return;
     const label=rec.id||rec.caseId||rec.project||rec.vendor||rec.inspectionId||'this record';
-    if(!confirm(`Delete ${label}?\n\nThis explicit deletion will create a new protected revision. The prior revision remains recoverable in D1 history.`))return;
+    const moduleName={maintenance:'Work Order',violations:'Violation',projects:'Project',vendors:'Vendor',inspections:'Inspection'}[key]||'Record';
+    if(!confirm(`Delete ${moduleName} ${label}?\n\nThis permanently removes it from the active cloud data. A protected prior revision remains available for recovery.`))return;
     const copy=structuredClone(state);
     copy[key].splice(i,1);
     document.getElementById('recordDialog').close();
-    await v9Commit(copy,`Explicitly deleted ${label}`,true);
+    await v9Commit(copy,`Explicitly deleted ${label}`,true,{type:'delete',module:key,recordId:String(label)});
   },true);
 
   async function v9Boot(){
