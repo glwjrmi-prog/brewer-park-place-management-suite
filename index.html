@@ -27,7 +27,11 @@
         fetch('./d1-production-ui-patch.js',{cache:'no-store'})
       ]);
       for(const r of [htmlRes,bridgeRes,toolsRes,driveRes,auditRes,uiRes]) if(!r.ok) throw new Error('A required Management Suite component could not be loaded ('+r.status+').');
-      const html=await htmlRes.text();
+      let html=await htmlRes.text();
+      html=html
+        .replace(/Version 8\.29/g,'Version 9.0')
+        .replace(/Management Suite v8\.32/g,'Management Suite v9.0')
+        .replace(/Export backups regularly\./g,'Protected cloud data · automatic revision safety');
       let bridge=await bridgeRes.text();
       const replacements=[
         ['https://bpp-management-suite-staging-api.glwjrmi.workers.dev','https://bpp-management-suite-production-api.glwjrmi.workers.dev'],
