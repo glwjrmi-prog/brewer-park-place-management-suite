@@ -264,22 +264,43 @@
   };
 
   // Explicit delete is treated differently from an accidental shrinking database.
-  // The server still retains the previous revision in history before accepting the deletion.
-  document.getElementById('deleteRecordBtn')?.addEventListener('click',async function(e){
+  // Use a delegated capture listener so the delete control remains protected even if the Suite re-renders it.
+  // The server still retains the previous revision in history before accepting a protected-module deletion.
+  document.addEventListener('click',async function(e){
+    const btn=e.target&&e.target.closest?e.target.closest('#deleteRecordBtn'):null;
+    if(!btn)return;
     e.preventDefault();e.stopImmediatePropagation();
     if(!v9Ready||v9ReadOnly){alert('Deletion is unavailable while protected cloud status is unverified.');return}
-    const key=document.getElementById('recordModule').value;
-    const idx=document.getElementById('recordIndex').value;
+    const key=document.getElementById('recordModule')?.value||'';
+    const idx=document.getElementById('recordIndex')?.value??'';
     if(idx==='')return;
     const i=Number(idx),rows=Array.isArray(state[key])?state[key]:[];
     const rec=rows[i];if(!rec)return;
-    const label=rec.id||rec.caseId||rec.project||rec.vendor||rec.inspectionId||'this record';
+
+    const idFields={maintenance:'id',violations:'caseId',inspections:'inspectionId'};
+    const protectedModule=Object.prototype.hasOwnProperty.call(idFields,key);
+    const recordId=protectedModule?String(rec?.[idFields[key]]||'').trim():'';
+    const label=recordId||rec.project||rec.vendor||'this record';
     const moduleName={maintenance:'Work Order',violations:'Violation',projects:'Project',vendors:'Vendor',inspections:'Inspection'}[key]||'Record';
+
+    if(protectedModule&&!recordId){
+      alert('This protected record does not have the ID required for an authorized deletion. Nothing was deleted.');
+      return;
+    }
     if(!confirm(`Delete ${moduleName} ${label}?\n\nThis permanently removes it from the active cloud data. A protected prior revision remains available for recovery.`))return;
+
     const copy=structuredClone(state);
     copy[key].splice(i,1);
-    document.getElementById('recordDialog').close();
-    await v9Commit(copy,`Explicitly deleted ${label}`,true,{type:'delete',module:key,recordId:String(label)});
+    const ok=await v9Commit(
+      copy,
+      `Explicitly deleted ${label}`,
+      protectedModule,
+      protectedModule?{type:'delete',module:key,recordId}:null
+    );
+    if(ok){
+      document.getElementById('recordDialog')?.close();
+      v9Status('Authorized deletion saved to cloud','ok');
+    }
   },true);
 
   async function v9Boot(){
