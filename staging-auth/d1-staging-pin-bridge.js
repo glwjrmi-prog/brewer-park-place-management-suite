@@ -370,13 +370,15 @@
       document.title='Brewer Park Place Management Suite — D1 Staging';
       v9OverlayClose();
       v9StartPolling();
-      // Now that the authoritative state (including _access users) is loaded,
-      // start the Suite's normal per-user PIN/audit login.
+      // The Worker has already verified the user's PIN and established this session.
+      // Do not invoke the old browser-side PIN screen: its PIN hashes are deliberately
+      // omitted from /api/state responses, and a second login would not work.
       try{
         accessRemoveOverlay?.();
-        if(originalAuditStartSession)await originalAuditStartSession();
+        // Old account/switch-user actions must terminate the verified cloud session.
+        accessShowLogin=function(){ accessSignOut(); };
         auditEnhanceUI?.();
-      }catch(e){console.warn('Authorized-user startup warning',e)}
+      }catch(e){console.warn('Authorized-user UI startup warning',e)}
       v9Status('Data Safe · cloud current','ok');
     }catch(e){
       console.error(e);
