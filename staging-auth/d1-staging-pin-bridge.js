@@ -18,6 +18,32 @@
   let v9PollTimer=null;
   let v9LastRemote=null;
 
+  // Staging-only work-order numbering fix.
+  // The original Suite uses array.length + 1, which can reuse an ID when records were
+  // deleted, imported, or assigned nonconsecutively. Never reuse an existing ID.
+  const originalDefaultValue=(typeof defaultValue==='function')?defaultValue:null;
+  if(originalDefaultValue){
+    defaultValue=function(key,name){
+      if(key==='maintenance' && name==='id'){
+        const year=new Date().getFullYear();
+        const prefix='WO-'+year+'-';
+        const used=new Set((Array.isArray(state?.maintenance)?state.maintenance:[])
+          .map(r=>String(r?.id||'')));
+        let maximum=0;
+        for(const id of used){
+          if(!id.startsWith(prefix))continue;
+          const suffix=id.slice(prefix.length);
+          if(!/^\\d+$/.test(suffix))continue;
+          maximum=Math.max(maximum,Number(suffix));
+        }
+        let next=maximum+1;
+        while(used.has(prefix+String(next).padStart(3,'0')))next++;
+        return prefix+String(next).padStart(3,'0');
+      }
+      return originalDefaultValue(key,name);
+    };
+  }
+
   // Capture original access-session startup. We delay it until authoritative data is loaded.
   const originalAuditStartSession=(typeof auditStartSession==='function')?auditStartSession:null;
 
