@@ -20,7 +20,7 @@
     try{
       const [htmlRes,bridgeRes,toolsRes,driveRes,auditRes,uiRes,groundsRes]=await Promise.all([
         fetch(source,{cache:'no-store'}),
-        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/bpp-pin-auth-staging-2026-11-03/staging-auth/d1-staging-pin-bridge.js',{cache:'no-store'}),
+        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/b33ba524307566202400c3b55a835ae9aa143682/staging-auth/d1-staging-pin-bridge.js',{cache:'no-store'}),
         fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/d1-tools-ui-patch.js',{cache:'no-store'}),
         fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/d1-drive-picker-patch.js',{cache:'no-store'}),
         fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/d1-audit-provenance-patch.js',{cache:'no-store'}),
