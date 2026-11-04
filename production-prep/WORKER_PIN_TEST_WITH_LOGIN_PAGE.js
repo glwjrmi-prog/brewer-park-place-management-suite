@@ -800,7 +800,7 @@ function testSuiteLoader() {
 
 
 function testSecurityPage(){
-  const html = \`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BPP Isolated Access Check</title>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BPP Isolated Access Check</title>
 <style>body{font:17px system-ui,sans-serif;background:#eff4f1;color:#173a29;margin:0;padding:35px 15px}main{max-width:520px;margin:auto;background:white;border:1px solid #cddbd2;border-radius:16px;padding:26px;box-shadow:0 9px 24px #0001}h1{font-size:24px}p{line-height:1.5}button{background:#173a29;color:white;border:0;border-radius:8px;padding:14px 20px;font-size:17px;font-weight:700;cursor:pointer}button:disabled{opacity:.5}#out{margin-top:18px;white-space:pre-wrap;padding:14px;border-radius:8px;line-height:1.5}#out:empty{display:none}.ok{background:#e3f5eb;color:#115c36}.bad{background:#fff0ed;color:#a22525}small{color:#59675d}</style></head>
 <body><main><h1>BPP Test — User Permissions</h1><p>This checks that the API blocks administrator actions from an ordinary test user. It uses only the isolated test Worker and database.</p>
 <button id="run">Run Security Check</button><div id="out" role="status" aria-live="polite"></div>
@@ -844,6 +844,6 @@ out.textContent=(allBlocked?'PASS — server blocked all three administrator act
 }catch(e){out.className='bad';out.textContent='Security check could not complete: '+e.message;}
 finally{button.disabled=false;}
 };
-</script></body></html>\`;
+</script></body></html>`;
 return new Response(html,{status:200,headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"}});
 }
