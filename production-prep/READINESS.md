@@ -38,6 +38,16 @@
 - This is a historical backup, not proof of today's live production revision or counts; recheck live production immediately before migration.
 - The supplied file is **a SQL database export, not the deployed production Worker JavaScript**, which is still required for Worker compatibility review. No data was loaded into Cloudflare or GitHub.
 
+## Actual production Worker backup received and compared November 4
+- Source: uploaded `BPP_Cloudflare_Worker_Backup_2026-11-03.js.txt`. The comment on line 1 says staging, but `API_VERSION` is **`bpp-v9-production-1`**. Confirm actual deployed Worker version separately; a file name/version string alone cannot prove currently deployed code.
+- Production-specific behavior: `confirmedSingleDelete` authorizes exactly one requested deletion for maintenance, violations or inspections when the caller supplies a matching `deleteIntent` with `allowDestructive`. The old system allows it to anyone with the shared access token. This must not become a bypass for a regular PIN session.
+- Candidate `WORKER_AUTH_CANDIDATE.js` now retains this transitional single-delete mechanism **only for temporary legacy calls**, and requires exact target removal and unchanged other protected records. Ordinary PIN users cannot delete through the API; PIN administrators can use the protected destructive flow.
+- New candidate **removes the staging Pages preview-origin wildcard**. Production CORS checks only exact `ALLOWED_ORIGINS` entries.
+- Existing production website uses older browser-side PIN/account data. Candidate has an opt-in **`LEGACY_STATE_COMPAT=true`** gate solely for a staged cutover; it exposes the historical account fields *to the existing shared-key client*, so this flag must never become a permanent production configuration. It is off by default and modern PIN sessions never receive those hashes.
+- Added `PIN_BRIDGE_CANDIDATE.js`, a client bridge pointed at the production API but **not published or connected to the live site**. Requires integration tests with actual GitHub Pages launcher before deployment.
+- Candidate code and tests passed GitHub Actions on Nov 4: https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41828544795
+- **Still blocked:** deploy only after live Worker identity verification, live D1 baseline and fresh backup, staged Worker+website cutover testing, and a safe retirement strategy for stored SHA-256 legacy PIN digests and the shared key.
+
 ## Production data preservation rules
 - Production D1 database is the sole source of association records; do not overwrite it with staging data or a static HTML embedded dataset.
 - Capture pre-deploy read-only baseline: database ID, revision, checksum, total record counts and key status counts; compare after rollout.
