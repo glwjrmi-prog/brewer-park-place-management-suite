@@ -118,7 +118,7 @@ function permittedOrigin(origin, env) {
     const u = new URL(origin);
     return u.protocol === "https:" &&
       !u.username && !u.password && !u.port &&
-      /^[-a-z0-9]+\\.bpp-management-suite-staging\\.pages\\.dev$/i.test(u.hostname) &&
+      /^[-a-z0-9]+\.bpp-management-suite-staging\.pages\.dev$/i.test(u.hostname) &&
       u.origin === origin;
   } catch { return false; }
 }
