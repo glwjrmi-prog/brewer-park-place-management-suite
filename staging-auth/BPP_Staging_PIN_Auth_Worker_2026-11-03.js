@@ -81,7 +81,7 @@ export default {
       return json({ ok: false, error: "Not found" }, 404, cors);
     } catch (err) {
       console.error(err);
-      return json({ ok: false, error: "Server error", detail: safeError(err) }, 500);
+      return json({ ok: false, error: "Server error" }, 500, corsHeaders(request, env));
     }
   }
 };
@@ -109,15 +109,29 @@ function configuredOrigins(env) {
     .filter(Boolean);
 }
 
+// Allow only HTTPS preview subdomains belonging to this specific staging Pages project.
+// This does NOT permit arbitrary *.pages.dev websites or the production API.
+function permittedOrigin(origin, env) {
+  if (!origin || origin === "null") return false;
+  if (configuredOrigins(env).includes(origin)) return true;
+  try {
+    const u = new URL(origin);
+    return u.protocol === "https:" &&
+      !u.username && !u.password && !u.port &&
+      /^[-a-z0-9]+\\.bpp-management-suite-staging\\.pages\\.dev$/i.test(u.hostname) &&
+      u.origin === origin;
+  } catch { return false; }
+}
+
 function originAllowed(request, env) {
   const origin = request.headers.get("Origin");
   if (!origin) return true; // direct API tools/curl
-  return configuredOrigins(env).includes(origin);
+  return permittedOrigin(origin, env);
 }
 
 function corsHeaders(request, env) {
   const origin = request.headers.get("Origin");
-  const allowed = origin && configuredOrigins(env).includes(origin) ? origin : "";
+  const allowed = origin && permittedOrigin(origin, env) ? origin : "";
   return {
     ...(allowed ? { "Access-Control-Allow-Origin": allowed } : {}),
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -599,6 +613,16 @@ function mergeAndAuthorizeAccess(current, proposed, principal) {
     const {pinHash,salt,passwordHash,...v}=u; return v;
   }));
   if (principal.role !== 'admin' && oldPublic !== newPublic) return 'Only administrators may change users';
+  // A non-admin must not modify _access configuration, even when the users array is unchanged.
+  const oldAccess = structuredClone(current?._access || {});
+  const newAccess = structuredClone(proposed?._access || {});
+  delete oldAccess.users; delete newAccess.users;
+  if (principal.role !== 'admin' && JSON.stringify(oldAccess) !== JSON.stringify(newAccess))
+    return 'Only administrators may change access settings';
+  // Existing users cannot be silently removed, including by an administrator.
+  // Deactivation is supported; permanent deletion requires an explicit migration.
+  if (after.length < before.length || before.some(u => !after.some(v => v.id === u.id)))
+    return 'Existing user accounts must not be removed';
   for (const u of after) {
     const old = saved.get(u.id);
     if (old) {
