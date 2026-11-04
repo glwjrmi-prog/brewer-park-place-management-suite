@@ -231,10 +231,9 @@
   }
 
   // Replace the legacy whole-state browser/KV sync functions before the original startup timer fires.
-  auditStartSession=async function(){
-    if(!v9Ready)return;
-    if(originalAuditStartSession)return originalAuditStartSession();
-  };
+  // The server-authenticated PIN session replaces the legacy browser-side
+  // identity check. Running old startup opens an incompatible second PIN screen.
+  auditStartSession=async function(){ return; };
   cloudToken=function(){return v9Key};
   cloudRequireToken=function(){if(!v9Key)throw new Error('Protected production session is not configured.');return v9Key};
   cloudIsSetup=function(){return !!v9Key&&v9Ready};
@@ -390,6 +389,10 @@
       }
       sessionStorage.setItem(USER_KEY,currentUser.id);
       const remote=await v9GetState();
+      if (!Array.isArray(remote.data?._access?.users) ||
+          !remote.data._access.users.some(u=>u.id===currentUser.id&&u.active!==false)) {
+        throw new Error('Verified PIN account missing in authoritative state');
+      }
       // Sign-out must invalidate the server-side session, not just clear the browser's user id.
       accessSignOut=async function(){
         try{await v9Api('/api/auth/logout',{method:'POST'})}catch{}
