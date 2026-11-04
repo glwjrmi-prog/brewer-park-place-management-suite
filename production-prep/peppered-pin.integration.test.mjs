@@ -68,6 +68,11 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  };
  await db.prepare('INSERT INTO current_state(singleton_id,revision,state_json,checksum,counts_json,updated_at,updated_by,reason) VALUES(1,1,?,?,?,?,?,?)')
   .bind(JSON.stringify(data),'fixture-checksum','{}','2026-11-04','fixture','fixture').run();
+ // A leaked legacy ACCESS_TOKEN must not grant admin access by default.
+ const legacyRead=await get('/api/state','synthetic-old-shared-key');
+ assert.equal(legacyRead.res.status,401,'Legacy shared token unexpectedly bypassed PIN authorization');
+ const legacyBootstrap=await post('/api/bootstrap',{data:{}},'synthetic-old-shared-key');
+ assert.equal(legacyBootstrap.res.status,401,'Shared token unexpectedly permitted database bootstrap');
  // Real V8-isolate Worker login: triggers D1 read and PBKDF2 migration writes.
  const login=await post('/api/auth/login',{name:'Test User',pin:'654321'});
  assert.equal(login.res.status,200,JSON.stringify(login.data));
