@@ -28,5 +28,9 @@ jobs:
         run: node --test production-prep/auth-candidate.test.mjs
       - name: Validate current production launcher integration contract
         run: node --test production-prep/launcher-contract.test.mjs
+      - name: Syntax check peppered PIN experiment
+        run: node --check production-prep/WORKER_PEPPER_EXPERIMENT.js
+      - name: Test peppered PIN experiment using isolated D1
+        run: node --test production-prep/peppered-pin.integration.test.mjs
       - name: Run isolated Cloudflare runtime and D1 integration test
         run: node --test production-prep/miniflare-d1.integration.test.mjs
