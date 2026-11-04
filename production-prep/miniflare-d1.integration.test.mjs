@@ -30,7 +30,6 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
     ADMIN_TOKEN:'synthetic-admin-token',
     ALLOWED_ORIGINS:origin
   },
-  log:{},
  });
  t.after(async()=>{await mf.dispose()});
  db=await mf.getD1Database('DB');
