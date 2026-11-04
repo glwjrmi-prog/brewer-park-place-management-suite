@@ -51,7 +51,7 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
    identifier TEXT PRIMARY KEY, failures INTEGER NOT NULL DEFAULT 0,
    locked_until INTEGER NOT NULL DEFAULT 0
   );
-  `.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql+';');
+  `.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql.replace(/\s+/g,' ')+';');
  const schema=readFileSync('production-prep/SCHEMA_V2.sql','utf8').replace(/^--.*$/gm,'');
  for(const sql of schema.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql+';');
  const users=[
