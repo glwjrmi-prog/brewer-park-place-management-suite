@@ -1,0 +1,110 @@
+// Candidate authentication tests: synthetic user data only. No live Cloudflare access.
+// Run: node --test production-prep/auth-candidate.test.mjs
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
+import worker from './WORKER_AUTH_CANDIDATE.js';
+const crypto = globalThis.crypto || webcrypto;
+const hex = b => [...new Uint8Array(b)].map(n=>n.toString(16).padStart(2,'0')).join('');
+const sha = async t=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)));
+const allowed='https://c5a891d1.bpp-management-suite-staging.pages.dev';
+const unrelated='https://attacker.pages.dev';
+const salt='a'.repeat(32);
+async function fixture() {
+  const user={id:'usr-1',name:'Test Admin',role:'admin',active:true,salt,pinHash:await sha(salt+'|123456')};
+  const second={id:'usr-2',name:'Test User',role:'user',active:true,salt:'b'.repeat(32),pinHash:await sha('b'.repeat(32)+'|654321')};
+  const db={accounts:new Map(), attempts:new Map(), creds:new Map(), sessions:new Map(),
+    state:{singleton_id:1,revision:1,state_json:JSON.stringify({_access:{users:[user,second]},maintenance:[],projects:[],inspections:[],vendors:[],violations:[]}),checksum:'abc',counts_json:'{}',updated_at:'now',updated_by:'tester',reason:'fixture'},
+    prepare(sql) {
+      const args={sql,binds:[]};
+      const statement={
+        bind(...binds){args.binds=binds;return statement},
+        async first(){
+          if(sql.includes('FROM current_state'))return db.state;
+          if(sql.includes('FROM pin_attempts'))return db.attempts.get(args.binds[0])||null;
+          if(sql.includes('FROM pin_credentials'))return db.creds.get(args.binds[0])||null;
+          if(sql.includes('FROM pin_sessions_v2'))return db.sessions.get(args.binds[0])||null;
+          throw new Error('Unmocked SELECT: '+sql);
+        },
+        async run(){
+          if(sql.startsWith('INSERT INTO pin_attempts')) {
+            db.attempts.set(args.binds[0],{failures:args.binds[1],locked_until:args.binds[2]});return {};
+          }
+          if(sql.startsWith('DELETE FROM pin_attempts')) {db.attempts.delete(args.binds[0]);return {};}
+          if(sql.startsWith('INSERT INTO pin_credentials')) {
+            db.creds.set(args.binds[0],{salt:args.binds[1],verifier:args.binds[2],iterations:args.binds[3],source_pin_hash:args.binds[4]});return {};
+          }
+          if(sql.startsWith('INSERT INTO pin_sessions_v2')) {
+            db.sessions.set(args.binds[0],{user_id:args.binds[1],expires_at:args.binds[2],created_at:args.binds[3],account_fingerprint:args.binds[4]});return {};
+          }
+          if(sql.startsWith('DELETE FROM pin_sessions_v2')) {db.sessions.delete(args.binds[0]);return {};}
+          throw new Error('Unmocked write: '+sql);
+        }
+      };
+      return statement;
+    }
+  };
+  return {db,user,second,env:{DB:db,ACCESS_TOKEN:'private-legacy-test-token',ADMIN_TOKEN:'different-admin-token',ALLOWED_ORIGINS:'https://bpp-management-suite-staging.pages.dev'}};
+}
+function request(path,{method='GET',token='',body,origin=allowed}={}) {
+  const headers={Origin:origin};if(token)headers.Authorization='Bearer '+token;
+  if(body)headers['Content-Type']='application/json';
+  return new Request('https://test.worker'+path,{method,headers,body:body?JSON.stringify(body):undefined});
+}
+async function send(env,path,options) {
+  const response=await worker.fetch(request(path,options),env);
+  const data=await response.json().catch(()=>null);
+  return {response,data};
+}
+const login=(env,name='Test Admin',pin='123456',origin=allowed)=>
+  send(env,'/api/auth/login',{method:'POST',body:{name,pin},origin});
+test('preview-origin allowlist rejects unrelated project and allows intended origin',async()=>{
+  const {env}=await fixture();
+  const yes=await worker.fetch(new Request('https://test.worker/api/auth/login',{method:'OPTIONS',headers:{Origin:allowed}}),env);
+  const no=await worker.fetch(new Request('https://test.worker/api/auth/login',{method:'OPTIONS',headers:{Origin:unrelated}}),env);
+  assert.equal(yes.headers.get('access-control-allow-origin'),allowed);
+  assert.equal(no.headers.get('access-control-allow-origin'),null);
+});
+test('migrates a legacy PIN on first sign-in, verifies subsequent sign-in with PBKDF2',async()=>{
+  const {env,db}=await fixture();
+  const first=await login(env);
+  assert.equal(first.response.status,200);
+  assert.equal(db.creds.get('usr-1').iterations,310000);
+  assert.notEqual(db.creds.get('usr-1').verifier,db.state.pinHash);
+  const second=await login(env);
+  assert.equal(second.response.status,200);
+  assert.equal(db.creds.size,1);
+  const who=await send(env,'/api/auth/me',{token:second.data.token});
+  assert.equal(who.data.user.role,'admin');
+  const state=await send(env,'/api/state',{token:second.data.token});
+  assert.equal(state.data.data._access.users[0].pinHash,undefined);
+  assert.equal(state.data.data._access.users[0].salt,undefined);
+  const out=await send(env,'/api/auth/logout',{method:'POST',token:second.data.token});
+  assert.equal(out.response.status,200);
+  assert.equal((await send(env,'/api/auth/me',{token:second.data.token})).response.status,401);
+});
+test('PIN reset and role change invalidate old session; new PIN migrates verifier',async()=>{
+  const {env,db,user}=await fixture();
+  const one=await login(env);assert.equal(one.response.status,200);
+  user.salt='c'.repeat(32);user.pinHash=await sha(user.salt+'|987654');
+  db.state.state_json=JSON.stringify({_access:{users:[user,{id:'usr-2',name:'Test User',role:'user',active:true,salt:'b'.repeat(32),pinHash:await sha('b'.repeat(32)+'|654321')}]},maintenance:[],projects:[],inspections:[],vendors:[],violations:[]});
+  assert.equal((await send(env,'/api/auth/me',{token:one.data.token})).response.status,401);
+  assert.equal((await login(env,'Test Admin','123456')).response.status,401);
+  const two=await login(env,'Test Admin','987654');assert.equal(two.response.status,200);
+  user.role='user';db.state.state_json=JSON.stringify({_access:{users:[user]},maintenance:[],projects:[],inspections:[],vendors:[],violations:[]});
+  assert.equal((await send(env,'/api/auth/me',{token:two.data.token})).response.status,401);
+});
+test('normal user cannot modify access configuration or add users even with a direct API save',async()=>{
+  const {env,db}=await fixture();
+  const r=await login(env,'Test User','654321');assert.equal(r.response.status,200);
+  const current=JSON.parse(db.state.state_json);
+  current._access.users[0].role='user';
+  const attempt=await send(env,'/api/state',{method:'POST',token:r.data.token,body:{baseRevision:1,data:current,reason:'escalation'}});
+  assert.equal(attempt.response.status,403);
+  assert.equal(db.state.revision,1);
+});
+test('five incorrect PIN attempts trigger lockout',async()=>{
+  const {env}=await fixture();
+  for(let i=0;i<5;i++)assert.equal((await login(env,'Test Admin','000000')).response.status,401);
+  assert.equal((await login(env,'Test Admin','123456')).response.status,429);
+});
