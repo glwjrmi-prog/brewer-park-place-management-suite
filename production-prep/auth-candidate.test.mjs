@@ -158,3 +158,33 @@ test('legacy state compatibility is opt-in, and does not leak PIN verifiers to P
   const disabled=await send(env,'/api/state',{token:'private-legacy-test-token'});
   assert.equal(disabled.data.data._access.users[0].pinHash,undefined);
 });
+
+test('production-shaped state cannot lose Grounds Projects, knowledge base, or metadata on save', async()=>{
+  const {env,db}=await fixture();
+  const current=JSON.parse(db.state.state_json);
+  current.groundsProjects=[{id:'GP-01',status:'Active'}];
+  current.knowledgeBase=[{topic:'Storm door approval',summary:'Reference'}];
+  current.recoveryMetadata={created:'source-recovery'};
+  current.meta={name:'BPP'};
+  db.state.state_json=JSON.stringify(current);
+  const loginResponse=await login(env,'Test User','654321');
+  assert.equal(loginResponse.response.status,200);
+  const token=loginResponse.data.token;
+  const missing=structuredClone(current);
+  delete missing.groundsProjects;
+  const r1=await send(env,'/api/state',{method:'POST',token,body:{baseRevision:1,data:missing}});
+  assert.equal(r1.response.status,422);
+  const d2=structuredClone(current);
+  d2.groundsProjects=[];
+  const r2=await send(env,'/api/state',{method:'POST',token,body:{baseRevision:1,data:d2}});
+  assert.equal(r2.response.status,422);
+  const d3=structuredClone(current);
+  d3.knowledgeBase=[];
+  const r3=await send(env,'/api/state',{method:'POST',token,body:{baseRevision:1,data:d3}});
+  assert.equal(r3.response.status,422);
+  const d4=structuredClone(current);
+  delete d4.recoveryMetadata;
+  const r4=await send(env,'/api/state',{method:'POST',token,body:{baseRevision:1,data:d4}});
+  assert.equal(r4.response.status,422);
+  assert.equal(db.state.revision,1);
+});
