@@ -36,6 +36,9 @@ export default {
         return json({ ok: true, service: API_VERSION }, 200, cors);
       }
 
+      if (url.pathname === "/test-security" && request.method === "GET") {
+        return testSecurityPage();
+      }
       if (url.pathname === "/test-suite" && request.method === "GET") {
         return testSuiteLoader();
       }
@@ -793,4 +796,54 @@ document.getElementById('login').addEventListener('submit',async function(event)
 function testSuiteLoader() {
   // Rehearsal only. The loader fetches the pinned old Suite UI plus an isolated test bridge.
   return new Response("<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n  <title>BPP Management Suite — ISOLATED TEST</title>\n  <style>\n    body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#eef3ef;color:#173a29}\n    .loading{min-height:100vh;display:grid;place-items:center;padding:24px}\n    .card{background:#fff;border:1px solid #d6e0da;border-radius:18px;padding:24px;max-width:680px;box-shadow:0 14px 32px rgba(20,42,30,.09)}\n    h1{margin:0 0 8px}p{line-height:1.5}.err{color:#ad3e3e;white-space:pre-wrap}\n  </style>\n</head>\n<body><div style=\"position:fixed;z-index:2147483647;top:0;left:0;right:0;background:#a11b1b;color:white;text-align:center;font:700 15px Arial;padding:7px\">ISOLATED TEST — NO LIVE BPP RECORDS</div>\n  <div class=\"loading\"><div class=\"card\"><h1>Brewer Park Place Management Suite</h1><p>Loading BPP isolated test PIN login (test environment)…</p><div id=\"msg\"></div></div></div>\n  <script>\n  (async()=>{\n    const msg=document.getElementById('msg');\n    const source='https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/3c37610d2c9d85b25765ee54d2ed3253a91d041e/index.html';\n    try{\n      const [htmlRes,bridgeRes,toolsRes,driveRes,auditRes,uiRes,groundsRes]=await Promise.all([\n        fetch(source,{cache:'no-store'}),\n        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/bpp-pin-production-prep-2026-11-04/production-prep/ISOLATED_TEST_BRIDGE.js',{cache:'no-store'}),\n        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/d1-tools-ui-patch.js',{cache:'no-store'}),\n        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/d1-drive-picker-patch.js',{cache:'no-store'}),\n        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/d1-audit-provenance-patch.js',{cache:'no-store'}),\n        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/d1-production-ui-patch.js',{cache:'no-store'}),\n        fetch('https://raw.githubusercontent.com/glwjrmi-prog/brewer-park-place-management-suite/main/grounds-site-projects.js',{cache:'no-store'})\n      ]);\n      for(const r of [htmlRes,bridgeRes,toolsRes,driveRes,auditRes,uiRes,groundsRes]) if(!r.ok) throw new Error('A required Management Suite component could not be loaded ('+r.status+').');\n      let html=await htmlRes.text();\n      html=html\n        .replace(/Version 8\\.29/g,'Version 9.0')\n        .replace(/Management Suite v8\\.32/g,'Management Suite v9.0')\n        .replace(/Export backups regularly\\./g,'Protected cloud data · automatic revision safety');\n      let bridge=await bridgeRes.text();\n      // Testing only: The bridge points ONLY at the isolated test Worker and test D1.\n      const escScript=s=>s.replace(/<\\/script/gi,'<\\\\/script');\n      const tools=escScript(await toolsRes.text());\n      const drive=escScript(await driveRes.text());\n      const audit=escScript(await auditRes.text());\n      const ui=escScript(await uiRes.text());\n      const grounds=escScript(await groundsRes.text());\n      bridge=escScript(bridge);\n      const compat=escScript(`(function(){document.addEventListener('click',function(e){const tools=e.target&&e.target.closest?e.target.closest('#cloudToolsBtn'):null;if(tools&&!tools.onclick&&typeof bppOpenCloudTools==='function'){e.preventDefault();bppOpenCloudTools();return}const about=e.target&&e.target.closest?e.target.closest('#aboutBtn'):null;if(about&&!about.onclick&&typeof openAboutDialog==='function'){e.preventDefault();openAboutDialog();}});})();`);\n      const injected=html.replace('</body>','<script>'+bridge+'<\\/script><script>'+tools+'<\\/script><script>'+drive+'<\\/script><script>'+audit+'<\\/script><script>'+ui+'<\\/script><script>'+compat+'<\\/script><script>'+grounds+'<\\/script></body>');\n      document.open();document.write(injected);document.close();\n    }catch(e){msg.className='err';msg.textContent='Management Suite startup error: '+(e&&e.message?e.message:String(e));}\n  })();\n  </script>\n</body>\n</html>\n", {headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer'}});
+}
+
+
+function testSecurityPage(){
+  const html = \`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BPP Isolated Access Check</title>
+<style>body{font:17px system-ui,sans-serif;background:#eff4f1;color:#173a29;margin:0;padding:35px 15px}main{max-width:520px;margin:auto;background:white;border:1px solid #cddbd2;border-radius:16px;padding:26px;box-shadow:0 9px 24px #0001}h1{font-size:24px}p{line-height:1.5}button{background:#173a29;color:white;border:0;border-radius:8px;padding:14px 20px;font-size:17px;font-weight:700;cursor:pointer}button:disabled{opacity:.5}#out{margin-top:18px;white-space:pre-wrap;padding:14px;border-radius:8px;line-height:1.5}#out:empty{display:none}.ok{background:#e3f5eb;color:#115c36}.bad{background:#fff0ed;color:#a22525}small{color:#59675d}</style></head>
+<body><main><h1>BPP Test — User Permissions</h1><p>This checks that the API blocks administrator actions from an ordinary test user. It uses only the isolated test Worker and database.</p>
+<button id="run">Run Security Check</button><div id="out" role="status" aria-live="polite"></div>
+<p><small>No PIN or session token will be displayed. If you are signed out, return to the isolated Management Suite and sign in as BPP Test User.</small></p></main>
+<script>
+document.getElementById('run').onclick=async function(){
+const out=document.getElementById('out'),button=this; button.disabled=true;out.className='';out.textContent='Checking…';
+try{
+const token=sessionStorage.getItem('BPPMS_PIN_ISOLATED_USER_SESSION')||'';
+if(!/^[0-9a-f]{64}$/.test(token))throw Error('No test session found. Open the full test Suite in this tab and sign in as BPP Test User.');
+const headers={Authorization:'Bearer '+token};
+const read=async (path,opts={})=>{let r=await fetch(path,{...opts,headers:{...headers,...(opts.headers||{})},cache:'no-store'});let body=await r.json().catch(()=>({}));return {status:r.status,body}};
+const who=await read('/api/auth/me');
+if(who.status!==200||who.body?.user?.role!=='user')throw Error('Sign in as BPP Test User before running this check.');
+const state=await read('/api/state');
+if(state.status!==200||!state.body?.initialized)throw Error('Could not read isolated test state.');
+const before=state.body;
+if(before.data?._access?.users?.some(u=>u.pinHash||u.salt||u.passwordHash))throw Error('FAILED: account secrets were exposed to the browser.');
+const blocked=[];
+const opts={method:'POST',headers:{'Content-Type':'application/json'}};
+const bootstrap=await read('/api/bootstrap',{...opts,body:JSON.stringify({data:{}})});
+blocked.push({name:'Database bootstrap',status:bootstrap.status});
+const restore=await read('/api/restore',{...opts,body:JSON.stringify({revision:1})});
+blocked.push({name:'Database restore',status:restore.status});
+const proposal=structuredClone(before.data);
+const self=proposal._access?.users?.find(u=>u.id===who.body.user.id);
+if(!self)throw Error('Could not locate the active ordinary test account.');
+self.role='admin';
+const escalation=await read('/api/state',{...opts,body:JSON.stringify({baseRevision:before.revision,data:proposal,reason:'ISOLATED ROLE ESCALATION REJECTION TEST'})});
+blocked.push({name:'Unauthorized role elevation',status:escalation.status});
+const after=await read('/api/state');
+if(after.status!==200)throw Error('Could not recheck the database.');
+if(after.body.revision!==before.revision)throw Error('FAILED: state revision changed during security check. Stop testing and report this.');
+const allBlocked=blocked.every(x=>x.status===403);
+out.className=allBlocked?'ok':'bad';
+out.textContent=(allBlocked?'PASS — server blocked all three administrator actions.':'SECURITY CHECK FAILED — an action was not rejected as expected.')+
+'\\nUser: '+who.body.user.name+' (regular user)'+
+'\\n'+blocked.map(x=>x.name+': HTTP '+x.status).join('\\n')+
+'\\nDatabase revision unchanged: '+before.revision+
+'\\nAccount PIN hashes hidden: Yes';
+}catch(e){out.className='bad';out.textContent='Security check could not complete: '+e.message;}
+finally{button.disabled=false;}
+};
+</script></body></html>\`;
+return new Response(html,{status:200,headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"}});
 }
