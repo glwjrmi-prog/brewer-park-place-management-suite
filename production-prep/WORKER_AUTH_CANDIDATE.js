@@ -232,6 +232,35 @@ function validateShape(data) {
   return errors;
 }
 
+// Production compatibility: the old UI supports a confirmed single-record delete.
+// This is intentionally narrower than an unrestricted destructive state upload.
+// It is accepted only for a logged-in administrator (or the temporary legacy key).
+function confirmedSingleDelete(beforeData, afterData, body) {
+  if (body?.allowDestructive !== true) return false;
+  const intent=body?.deleteIntent;
+  if (!intent || intent.type !== 'delete') return false;
+  const fields={maintenance:'id',violations:'caseId',inspections:'inspectionId'};
+  const field=fields[intent.module];
+  const id=String(intent.recordId||'').trim();
+  if (!field||!id) return false;
+  const before=arrayOf(beforeData,intent.module);
+  const after=arrayOf(afterData,intent.module);
+  if (before.length !== after.length+1) return false;
+  if (before.filter(r=>String(r?.[field]||'').trim()===id).length!==1) return false;
+  if (after.some(r=>String(r?.[field]||'').trim()===id)) return false;
+  // A delete request must not mutate other records in the deleted collection
+  // or any other protected collection.
+  for(const name of PROTECTED_COLLECTIONS) {
+    const oldRows=arrayOf(beforeData,name);
+    const newRows=arrayOf(afterData,name);
+    if (name===intent.module) {
+      const preserved=oldRows.filter(r=>String(r?.[field]||'').trim()!==id);
+      if (JSON.stringify(preserved)!==JSON.stringify(newRows)) return false;
+    } else if (JSON.stringify(oldRows)!==JSON.stringify(newRows)) return false;
+  }
+  return true;
+}
+
 function destructiveDifferences(current, proposed) {
   const issues = [];
   const before = recordCounts(current);
@@ -365,9 +394,10 @@ async function saveState(request, env, cors, principal) {
   const accessCheck = mergeAndAuthorizeAccess(currentData, body.data, principal);
   if (accessCheck) return json({ ok: false, error: accessCheck }, 403, cors);
   const destructive = destructiveDifferences(currentData, body.data);
+  const explicitSingleDelete = confirmedSingleDelete(currentData, body.data, body);
   const allowDestructive = principal.legacy
-    ? body?.allowDestructive === true && adminAuthorized(request, env.ADMIN_TOKEN)
-    : body?.allowDestructive === true && principal.role === "admin";
+    ? ((body?.allowDestructive === true && adminAuthorized(request, env.ADMIN_TOKEN)) || explicitSingleDelete)
+    : (body?.allowDestructive === true && principal.role === "admin");
   if (destructive.length && !allowDestructive) {
     return json({
       ok: false,
