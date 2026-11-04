@@ -20,6 +20,10 @@ jobs:
         run: node --check production-prep/WORKER_AUTH_CANDIDATE.js
       - name: Syntax check production client bridge
         run: node --check production-prep/PIN_BRIDGE_CANDIDATE.js
+      - name: Syntax check isolated full-suite test Worker and bridge
+        run: |
+          node --check production-prep/WORKER_PIN_TEST_WITH_LOGIN_PAGE.js
+          node --check production-prep/ISOLATED_TEST_BRIDGE.js
       - name: Run synthetic authentication tests
         run: node --test production-prep/auth-candidate.test.mjs
       - name: Validate current production launcher integration contract
