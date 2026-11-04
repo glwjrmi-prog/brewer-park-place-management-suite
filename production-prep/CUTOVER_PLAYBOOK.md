@@ -35,3 +35,19 @@ Prepared November 4, 2026 for BPP Management Suite.
 - Offline D1 schema test against November 3 SQL backup left its data byte-for-byte unchanged.
 
 **Release status: BLOCKED.** Do not deploy from this document.
+
+## Hardened PIN prototype status — November 4
+
+Code-only isolated research prototype: `WORKER_PEPPER_EXPERIMENT.js`; its Miniflare test is `peppered-pin.integration.test.mjs`. Neither file is a production release candidate. The prototype uses an additional **server-side `PIN_PEPPER` Cloudflare Secret**, HMAC-SHA256 bound to account ID, and PBKDF2-SHA256 at 100,000 iterations (the maximum shown compatible in the real isolated Worker). A missing/short secret fails closed on login. Shared `ACCESS_TOKEN` bypass is disabled by default; `LEGACY_ADMIN_ROLLBACK=enabled` would have to be deliberately configured to restore it and must not be left enabled indefinitely.
+
+### Critical design caveat
+Existing `current_state.state_json` and `state_revisions.state_json` may still contain legacy six-digit PIN fast-hash verifiers and salts. **A server pepper protects new PIN verifier storage against D1-only offline attacks only after legacy fast hashes have been retired.** Migrating new credential table entries without removing historical fast hashes does not solve that problem. Historical revisions must also be protected against reintroducing legacy credentials through restore. Never purge association history without independently tested non-credential data preservation, verified backups, and explicit approval. Old backups and restored historical copies containing fast hashes remain sensitive.
+
+### Required release sequence (not yet implemented)
+1. Produce and verify a fresh production backup and compare current state revision, checksum, work order IDs/counts, vendor/project/grounds modules and revision history.
+2. Provide an administrator-only credential enrollment/reset endpoint independent of `/api/state`. It must accept plaintext PIN only over HTTPS, never echo it, produce server-peppered KDF verifiers, and revoke all affected sessions.
+3. Separate **public profile metadata** from credential verification records; block browser writes to PIN salt/hash fields and prohibit returning legacy hashes to any client, including rollback clients.
+4. Design a reversible, fully tested **credential-only historical sanitization** of current state and revision snapshots, updating integrity metadata. Retain every association record and audit detail, and verify checksums/counts/IDs for each revision; do not simply delete historical revisions. Restore must never silently restore old credential hashes.
+5. Retire and rotate privileged legacy tokens, remove the compatibility gate and confirm no bypass of PIN authorization. Provide a separate tightly controlled rollback not dependent on reopening permanent shared admin access.
+6. Rehearse the revised Worker + full website on a realistic non-production D1 clone in Cloudflare, including multi-user concurrency, account resets, and code-only rollback.
+7. Only then request a go/no-go for the live deployment. **No production changes are authorized by this document.**
