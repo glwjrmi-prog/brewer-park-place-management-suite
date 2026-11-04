@@ -330,10 +330,17 @@
   },true);
 
   async function v9Boot(){
-    v9Overlay('Connecting to the authoritative D1 staging database. Editing is disabled until the newest cloud revision is loaded.');
+    // Fail closed: a candidate accidentally hosted on a staging or third-party
+    // origin must never send authenticated requests to production.
+    if(location.origin !== 'https://glwjrmi-prog.github.io' ||
+       !location.pathname.startsWith('/brewer-park-place-management-suite/')){
+      v9Overlay('Production PIN bridge disabled on this host. No cloud changes can be made.');
+      return;
+    }
+    v9Overlay('Connecting to the protected production database. Editing is disabled until the newest cloud revision is loaded.');
     try{
-      // Staging PIN login. No shared key is requested or written to localStorage.
-      const SESSION_KEY='BPPMS_V9_STAGING_USER_SESSION';
+      // Production PIN login. No shared key is requested or written to localStorage.
+      const SESSION_KEY='BPPMS_V9_PRODUCTION_PIN_USER_SESSION';
       const USER_KEY='BPPMS_AUTH_USER_ID';
       async function verifySession(token){
         v9Key=token;
@@ -346,8 +353,8 @@
           const card=overlay?.firstElementChild;
           if(!card)return reject(new Error('Login screen unavailable'));
           card.innerHTML='';
-          const heading=document.createElement('h2');heading.textContent='BPP Staging Sign In';heading.style.color='#173a29';
-          const note=document.createElement('p');note.textContent='Enter the authorized name and six-digit PIN. No production or production session is required.';
+          const heading=document.createElement('h2');heading.textContent='BPP Management Suite Sign In';heading.style.color='#173a29';
+          const note=document.createElement('p');note.textContent='Enter your authorized name and six-digit PIN.';
           const name=document.createElement('input');name.placeholder='Your name';name.autocomplete='username';
           const pin=document.createElement('input');pin.type='password';pin.inputMode='numeric';pin.maxLength=6;pin.autocomplete='current-password';pin.placeholder='6-digit PIN';
           const error=document.createElement('p');error.style.color='#a33';error.setAttribute('role','alert');
