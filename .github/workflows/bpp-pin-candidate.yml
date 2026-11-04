@@ -14,6 +14,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install local Cloudflare Worker/D1 emulator
+        run: npm install --no-save --no-package-lock miniflare@3
       - name: Syntax check candidate
         run: node --check production-prep/WORKER_AUTH_CANDIDATE.js
       - name: Syntax check production client bridge
@@ -22,3 +24,5 @@ jobs:
         run: node --test production-prep/auth-candidate.test.mjs
       - name: Validate current production launcher integration contract
         run: node --test production-prep/launcher-contract.test.mjs
+      - name: Run isolated Cloudflare runtime and D1 integration test
+        run: node --test production-prep/miniflare-d1.integration.test.mjs
