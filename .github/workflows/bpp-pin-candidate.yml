@@ -1,0 +1,20 @@
+name: BPP PIN candidate security tests
+on:
+  push:
+    branches:
+      - bpp-pin-production-prep-2026-11-04
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pin-auth-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check candidate
+        run: node --check production-prep/WORKER_AUTH_CANDIDATE.js
+      - name: Run synthetic authentication tests
+        run: node --test production-prep/auth-candidate.test.mjs
