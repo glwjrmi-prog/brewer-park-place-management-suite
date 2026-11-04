@@ -33,7 +33,7 @@
         for(const id of used){
           if(!id.startsWith(prefix))continue;
           const suffix=id.slice(prefix.length);
-          if(!/^\\d+$/.test(suffix))continue;
+          if(!/^\d+$/.test(suffix))continue;
           maximum=Math.max(maximum,Number(suffix));
         }
         let next=maximum+1;
