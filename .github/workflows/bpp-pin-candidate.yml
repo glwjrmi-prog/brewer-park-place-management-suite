@@ -28,6 +28,8 @@ jobs:
         run: node --test production-prep/auth-candidate.test.mjs
       - name: Validate current production launcher integration contract
         run: node --test production-prep/launcher-contract.test.mjs
+      - name: Test read-only credential-history audit on synthetic SQL export
+        run: python production-prep/credential_history.test.py
       - name: Syntax check peppered PIN experiment
         run: node --check production-prep/WORKER_PEPPER_EXPERIMENT.js
       - name: Test peppered PIN experiment using isolated D1
