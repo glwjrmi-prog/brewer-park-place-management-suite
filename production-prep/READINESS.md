@@ -55,6 +55,14 @@
 - This checks **schema-only safety against the November 3 backup**, NOT Cloudflare runtime, newer production changes, authentication integration or the live migration itself.
 - Client bridge syntax and synthetic Worker integration tests passed: https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41828798664
 
+## November 4 follow-up: data-module protection and website compatibility
+- The production snapshot also contains `groundsProjects`, `knowledgeBase`, and `recoveryMetadata`. New Worker candidate protections now reject omitted top-level modules, and treat Grounds Projects and Knowledge Base as protected collections. Synthetic regression tests confirm omission/removal is blocked.
+- Corrected PIN client login text, created separate production PIN session-storage key, and added an official GitHub Pages origin/path guard to the production-client candidate; the candidate cannot silently call production API when hosted on a staging domain.
+- Added `launcher-contract.test.mjs` to check that the existing live launcher remains untouched on the preparation branch and to verify URL routing, expected modules, and production-only origins.
+- See `CUTOVER_PLAYBOOK.md` for rehearsal, fresh-backup, cutover, code-only rollback and the outstanding blockers.
+- Latest candidate CI including both synthetic auth and launcher contract checks passed: https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41831442677
+- **Integration against a real isolated Cloudflare D1/Worker and a complete browser test remains outstanding. No deployment authorized.**
+
 ## Production data preservation rules
 - Production D1 database is the sole source of association records; do not overwrite it with staging data or a static HTML embedded dataset.
 - Capture pre-deploy read-only baseline: database ID, revision, checksum, total record counts and key status counts; compare after rollout.
