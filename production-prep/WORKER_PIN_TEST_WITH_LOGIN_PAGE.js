@@ -1,4 +1,4 @@
-// REVIEW REQUIRED: credentials migrate on next successful login; legacy SHA hashes
+// TEST-ONLY COMPATIBILITY BUILD. DO NOT DEPLOY TO PRODUCTION.\n// REVIEW REQUIRED: credentials migrate on next successful login; legacy SHA hashes
 // remain in authoritative state until a separate, coordinated credentials-only reset.
 // Do not claim complete at-rest migration from this change alone.
 // Requires idempotent additive migration in production-prep/SCHEMA_V2.sql.
@@ -17,7 +17,9 @@
 
 const API_VERSION = "bpp-v9-production-pin-candidate";
 const AUTH_SESSION_SECONDS = 8 * 60 * 60;
-const PBKDF2_ITERATIONS = 310000;
+// TEST-ONLY: Cloudflare Workers WebCrypto rejects a single PBKDF2 call above 100,000 iterations.
+// This reduced cost is for isolated compatibility testing, NOT an approved production setting.
+const PBKDF2_ITERATIONS = 100000;
 const PROTECTED_COLLECTIONS = ["maintenance", "violations", "projects", "inspections", "vendors", "groundsProjects", "knowledgeBase"];
 
 export default {
@@ -607,7 +609,7 @@ function hexBytes(hex) {
 }
 async function pbkdf2Pin(pin, saltHex, iterations) {
   // Do not accept attacker-controlled KDF parameters from a browser request.
-  if (!Number.isInteger(iterations) || iterations < 310000 || iterations > 1000000)
+  if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 100000)
     throw new Error('Unsupported credential cost');
   const base = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(String(pin)),
