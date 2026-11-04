@@ -16,5 +16,7 @@ jobs:
           node-version: '22'
       - name: Syntax check candidate
         run: node --check production-prep/WORKER_AUTH_CANDIDATE.js
+      - name: Syntax check production client bridge
+        run: node --check production-prep/PIN_BRIDGE_CANDIDATE.js
       - name: Run synthetic authentication tests
         run: node --test production-prep/auth-candidate.test.mjs
