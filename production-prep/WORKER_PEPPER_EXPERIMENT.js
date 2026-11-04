@@ -47,7 +47,7 @@ export default {
         if (typeof env.PIN_PEPPER !== 'string' || env.PIN_PEPPER.length < 32) return json({ok:false,error:'Authentication configuration unavailable'},503,cors);
         return loginWithPin(request, env, cors);
       }
-      const legacy = authorized(request, env.ACCESS_TOKEN);
+      const legacy = env.LEGACY_ADMIN_ROLLBACK === 'enabled' && authorized(request, env.ACCESS_TOKEN);
       const principal = legacy ? { id: "legacy-admin", name: "Legacy Administrator", role: "admin", legacy: true } : await authenticateSession(request, env);
       if (!principal) return json({ ok: false, error: "Unauthorized" }, 401, cors);
       if (url.pathname === "/api/auth/me" && request.method === "GET") {
