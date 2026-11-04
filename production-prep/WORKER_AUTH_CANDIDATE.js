@@ -15,7 +15,7 @@
 //
 // This worker intentionally stores NO real data in source control.
 
-const API_VERSION = "bpp-v9-staging-1";
+const API_VERSION = "bpp-v9-production-pin-candidate";
 const AUTH_SESSION_SECONDS = 8 * 60 * 60;
 const PBKDF2_ITERATIONS = 310000;
 const PROTECTED_COLLECTIONS = ["maintenance", "violations", "projects", "inspections", "vendors"];
@@ -118,15 +118,8 @@ function configuredOrigins(env) {
 // Allow only HTTPS preview subdomains belonging to this specific staging Pages project.
 // This does NOT permit arbitrary *.pages.dev websites or the production API.
 function permittedOrigin(origin, env) {
-  if (!origin || origin === "null") return false;
-  if (configuredOrigins(env).includes(origin)) return true;
-  try {
-    const u = new URL(origin);
-    return u.protocol === "https:" &&
-      !u.username && !u.password && !u.port &&
-      /^[-a-z0-9]+\.bpp-management-suite-staging\.pages\.dev$/i.test(u.hostname) &&
-      u.origin === origin;
-  } catch { return false; }
+  // Production: exact allowlist only. Never inherit staging preview wildcard.
+  return !!origin && origin !== 'null' && configuredOrigins(env).includes(origin);
 }
 
 function originAllowed(request, env) {
@@ -333,7 +326,7 @@ async function getState(env, cors, principal) {
     initialized: true,
     service: API_VERSION,
     ...publicMeta(row),
-    data: redactState(JSON.parse(row.state_json), principal)
+    data: redactState(JSON.parse(row.state_json), principal, env)
   }, 200, cors);
 }
 
@@ -352,7 +345,7 @@ async function bootstrap(request, env, cors) {
   const checksum = await sha256Text(stateJson);
   const countsJson = JSON.stringify(recordCounts(stamped));
   const now = new Date().toISOString();
-  const reason = reasonText(body?.reason || "Initial staging import");
+  const reason = reasonText(body?.reason || "Initial production import");
 
   await env.DB.batch([
     env.DB.prepare(
@@ -483,7 +476,7 @@ async function getRevision(revision, env, cors, principal) {
 
   const current = await currentRow(env);
   if (current && Number(current.revision) === revision) {
-    return json({ ok: true, current: true, ...publicMeta(current), data: redactState(JSON.parse(current.state_json), principal) }, 200, cors);
+    return json({ ok: true, current: true, ...publicMeta(current), data: redactState(JSON.parse(current.state_json), principal, env) }, 200, cors);
   }
 
   const row = await env.DB.prepare(
@@ -500,7 +493,7 @@ async function getRevision(revision, env, cors, principal) {
     updatedAt: row.saved_at,
     updatedBy: row.saved_by,
     reason: row.reason,
-    data: redactState(JSON.parse(row.state_json), principal)
+    data: redactState(JSON.parse(row.state_json), principal, env)
   }, 200, cors);
 }
 
@@ -568,7 +561,10 @@ async function restoreRevision(request, env, cors) {
 
 // PIN authentication for the staging-only migration. Requires BPP_PIN_AUTH_MIGRATION.sql.
 function publicUser(u) { return { id: u.id, name: u.name, role: u.role }; }
-function redactState(data, principal) {
+function redactState(data, principal, env) {
+  // Temporary explicit compatibility only: old live UI requires historical
+  // account data. Remove this gate and rotate the legacy shared key at cutover.
+  if (principal?.legacy && env?.LEGACY_STATE_COMPAT === 'true') return structuredClone(data);
   const copy = structuredClone(data);
   if (Array.isArray(copy?._access?.users)) {
     copy._access.users = copy._access.users.map(u => {
