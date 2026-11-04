@@ -63,6 +63,13 @@
 - Latest candidate CI including both synthetic auth and launcher contract checks passed: https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41831442677
 - **Integration against a real isolated Cloudflare D1/Worker and a complete browser test remains outstanding. No deployment authorized.**
 
+## November 4: isolated Cloudflare-compatible Worker + D1 integration result
+- Added `miniflare-d1.integration.test.mjs` and installed Miniflare in candidate GitHub Actions. The test executes `WORKER_AUTH_CANDIDATE.js` in a Cloudflare Worker emulator with a real local D1 SQLite database created using `SCHEMA_V2.sql`, rather than mocking D1 calls.
+- On **synthetic association records only**, tested legacy PIN sign-in + PBKDF2 migration, database credential creation, PIN session verification, secret redaction, direct rejection of missing `groundsProjects`, unauthorized role edit rejection, authorized admin state save + revision increment + history entry, logout invalidation, and rejection of a staging-origin CORS response.
+- **All CI checks passed:** https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41834034165
+- This is **not** deployment to the user's Cloudflare account. It does not test the complete live website UI or a production D1 clone. The live GitHub Pages launcher and production Worker/database were not changed.
+- Outstanding critical gate: coordinated retirement of old PIN digest copies in current state/history and legacy shared-key privilege; browser end-to-end run using a truly isolated remote Cloudflare environment; new production backup immediately before cutover.
+
 ## Production data preservation rules
 - Production D1 database is the sole source of association records; do not overwrite it with staging data or a static HTML embedded dataset.
 - Capture pre-deploy read-only baseline: database ID, revision, checksum, total record counts and key status counts; compare after rollout.
