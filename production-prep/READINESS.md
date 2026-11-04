@@ -48,6 +48,13 @@
 - Candidate code and tests passed GitHub Actions on Nov 4: https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41828544795
 - **Still blocked:** deploy only after live Worker identity verification, live D1 baseline and fresh backup, staged Worker+website cutover testing, and a safe retirement strategy for stored SHA-256 legacy PIN digests and the shared key.
 
+## Offline schema-copy safety check (November 4)
+- Loaded the user's November 3 SQL export into **memory-only SQLite**. Applied the exact two proposed new table definitions and indexes from `SCHEMA_V2.sql` on the disposable copy.
+- `current_state.revision` remained **187**; `state_json` bytes were identical before/after (SHA-256 begins `2e6eea835108`).
+- Verified original counts still 72 work orders, 11 projects, 41 vendors, 0 violations and 0 inspections. Authentication tables `pin_credentials` and `pin_sessions_v2` were created.
+- This checks **schema-only safety against the November 3 backup**, NOT Cloudflare runtime, newer production changes, authentication integration or the live migration itself.
+- Client bridge syntax and synthetic Worker integration tests passed: https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41828798664
+
 ## Production data preservation rules
 - Production D1 database is the sole source of association records; do not overwrite it with staging data or a static HTML embedded dataset.
 - Capture pre-deploy read-only baseline: database ID, revision, checksum, total record counts and key status counts; compare after rollout.
