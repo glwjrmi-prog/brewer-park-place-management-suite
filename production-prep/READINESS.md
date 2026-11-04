@@ -29,6 +29,15 @@
 8. **CORS:** restrict allowed origins to exact live domain(s). Staging-preview wildcard belongs to staging API only; do not copy that allowance into production.
 9. **Rollback:** practice a code-only Worker rollback; do not restore older staging or backup records over active production state. Preserve current production D1 database separately.
 
+## November 3, 2026 production SQL export — offline verified November 4
+- Uploaded SQL export parsed successfully in an isolated, in-memory SQLite instance. Four tables: `current_state`, `state_revisions`, `audit_events`, `sqlite_sequence` (the last is SQLite metadata).
+- Export snapshot revision **187**, timestamp **2026-11-03T00:39:10.160Z**.
+- **72 work orders** (70 Closed, 2 Pending); highest issued `WO-2026-079`, no duplicate IDs. Next new order from that snapshot would be `WO-2026-080`, NOT staging's `WO-2026-060`.
+- **11 projects** (7 Complete, 3 Planning, 1 Cancelled), **41 vendors**, **0 violations**, **0 inspections**.
+- State also includes `groundsProjects`, knowledge base and `_access`; must preserve each. Backup has **2 account entries**, no account details copied into source control.
+- This is a historical backup, not proof of today's live production revision or counts; recheck live production immediately before migration.
+- The supplied file is **a SQL database export, not the deployed production Worker JavaScript**, which is still required for Worker compatibility review. No data was loaded into Cloudflare or GitHub.
+
 ## Production data preservation rules
 - Production D1 database is the sole source of association records; do not overwrite it with staging data or a static HTML embedded dataset.
 - Capture pre-deploy read-only baseline: database ID, revision, checksum, total record counts and key status counts; compare after rollout.
