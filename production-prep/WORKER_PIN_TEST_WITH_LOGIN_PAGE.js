@@ -764,7 +764,14 @@ document.getElementById('login').addEventListener('submit',async function(event)
   document.getElementById('pin').value='';
   try{
     const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin}),credentials:'omit'});
-    const data=await response.json();
+    const kind=response.headers.get('content-type')||'(missing)';
+    const raw=await response.text();
+    let data;
+    try { data=JSON.parse(raw); } catch {
+      const pageTitle=raw.match(/<title[^>]*>([^<]{1,120})<\\/title>/i)?.[1]||'(no page title)';
+      const cfHint=/challenge-platform|cf-chl|Just a moment|Attention Required|Checking your browser/i.test(raw);
+      throw new Error('HTTP '+response.status+'; content-type '+kind+'; HTML page title: '+pageTitle+(cfHint?' (Cloudflare challenge suspected)':'')+'.');
+    }
     if(!response.ok||!data.ok||!data.token)throw new Error(data.error||'Login was not accepted (HTTP '+response.status+')');
     const verify=await fetch('/api/auth/me',{headers:{Authorization:'Bearer '+data.token},credentials:'omit'});
     const me=await verify.json();
