@@ -18,7 +18,7 @@
 const API_VERSION = "bpp-v9-production-pin-candidate";
 const AUTH_SESSION_SECONDS = 8 * 60 * 60;
 const PBKDF2_ITERATIONS = 310000;
-const PROTECTED_COLLECTIONS = ["maintenance", "violations", "projects", "inspections", "vendors"];
+const PROTECTED_COLLECTIONS = ["maintenance", "violations", "projects", "inspections", "vendors", "groundsProjects", "knowledgeBase"];
 
 export default {
   async fetch(request, env) {
@@ -386,6 +386,13 @@ async function saveState(request, env, cors, principal) {
   // Never accept a client-provided actor or unverified account modifications.
   const accessCheck = mergeAndAuthorizeAccess(currentData, body.data, principal);
   if (accessCheck) return json({ ok: false, error: accessCheck }, 403, cors);
+  // A partial/old client must never silently erase a top-level data module.
+  // A privileged, explicit restore remains available through its separate endpoint.
+  const missingTopLevel = Object.keys(currentData).filter(key => key !== '_sync' &&
+    !Object.prototype.hasOwnProperty.call(body.data, key));
+  if (missingTopLevel.length) {
+    return json({ok:false,error:'Save blocked: missing stored data modules',details:missingTopLevel},422,cors);
+  }
   const destructive = destructiveDifferences(currentData, body.data);
   const explicitSingleDelete = confirmedSingleDelete(currentData, body.data, body);
   const allowDestructive = principal.legacy
