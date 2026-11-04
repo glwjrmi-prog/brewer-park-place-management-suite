@@ -86,3 +86,11 @@ At the November 3 screenshot: 2 open work orders, 3 active projects, 0 open viol
 - GitHub branch `bpp-pin-production-prep-2026-11-04` is separate from main and does not modify live production.
 - Next engineering task: make a tested production candidate from the *current* production Worker + PIN changes, with server-side policy tests and secure PIN hash migration. Do not deploy staging source unchanged.
 - Live action requires a final explicit go/no-go with backup and checked production database identity.
+
+## November 4: actual isolated Cloudflare PIN login verified (test only)
+- User created a new Worker `bpp-pin-integration-test-api` and new empty D1 `bpp-pin-integration-test` with six required tables, distinct from production and the existing staging infrastructure.
+- New test-only secrets `ACCESS_TOKEN` and `ADMIN_TOKEN` set in Cloudflare, plus explicit `ALLOWED_ORIGINS`; secrets were not copied to source control.
+- A synthetic user `BPP Test Admin` and synthetic empty data were seeded. The browser screenshot showed `SUCCESS — PIN login verified!`, role admin, and server-side session verification through `/api/auth/me`. No actual association records were imported.
+- Cloudflare Issues exposed an otherwise hidden runtime rejection: PBKDF2 calls with 310,000 iterations are unsupported in this Worker environment. A **test-only** code variant uses 100,000 iterations. This is NOT an approved production security setting, and the 310,000-iteration `WORKER_AUTH_CANDIDATE.js` remains incompatible until the design is replaced or revised.
+- Added `ISOLATED_TEST_BRIDGE.js`, `ISOLATED_TEST_LOADER.html` and test-Worker-only `/test-suite` to rehearse the full Management Suite against synthetic D1, without touching live or existing staging. Full-suite browser rehearsal has not been performed yet.
+- **Production remains blocked** until full browser workflows, secure PIN/legacy hash retirement strategy, privilege removal of shared key, fresh D1 backup, and code-only rollback checks pass.
