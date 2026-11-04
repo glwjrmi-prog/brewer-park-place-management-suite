@@ -20,3 +20,5 @@ jobs:
         run: node --check production-prep/PIN_BRIDGE_CANDIDATE.js
       - name: Run synthetic authentication tests
         run: node --test production-prep/auth-candidate.test.mjs
+      - name: Validate current production launcher integration contract
+        run: node --test production-prep/launcher-contract.test.mjs
