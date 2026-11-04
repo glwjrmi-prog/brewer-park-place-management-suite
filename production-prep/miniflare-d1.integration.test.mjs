@@ -33,7 +33,7 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  });
  t.after(async()=>{await mf.dispose()});
  db=await mf.getD1Database('DB');
- await db.exec(`
+ for(const sql of `
   CREATE TABLE current_state (
    singleton_id INTEGER PRIMARY KEY, revision INTEGER NOT NULL,
    state_json TEXT NOT NULL, checksum TEXT NOT NULL, counts_json TEXT NOT NULL,
@@ -51,8 +51,9 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
    identifier TEXT PRIMARY KEY, failures INTEGER NOT NULL DEFAULT 0,
    locked_until INTEGER NOT NULL DEFAULT 0
   );
-  `);
- await db.exec(readFileSync('production-prep/SCHEMA_V2.sql','utf8'));
+  `.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql+';');
+ const schema=readFileSync('production-prep/SCHEMA_V2.sql','utf8').replace(/^--.*$/gm,'');
+ for(const sql of schema.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql+';');
  const users=[
   {id:'admin',name:'Test Admin',role:'admin',active:true,salt,pinHash:await hash(salt+'|123456')},
   {id:'viewer',name:'Test User',role:'user',active:true,salt:'2'.repeat(32),pinHash:await hash('2'.repeat(32)+'|654321')}
