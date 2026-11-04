@@ -94,3 +94,32 @@ At the November 3 screenshot: 2 open work orders, 3 active projects, 0 open viol
 - Cloudflare Issues exposed an otherwise hidden runtime rejection: PBKDF2 calls with 310,000 iterations are unsupported in this Worker environment. A **test-only** code variant uses 100,000 iterations. This is NOT an approved production security setting, and the 310,000-iteration `WORKER_AUTH_CANDIDATE.js` remains incompatible until the design is replaced or revised.
 - Added `ISOLATED_TEST_BRIDGE.js`, `ISOLATED_TEST_LOADER.html` and test-Worker-only `/test-suite` to rehearse the full Management Suite against synthetic D1, without touching live or existing staging. Full-suite browser rehearsal has not been performed yet.
 - **Production remains blocked** until full browser workflows, secure PIN/legacy hash retirement strategy, privilege removal of shared key, fresh D1 backup, and code-only rollback checks pass.
+
+## November 4: completed user-led isolated Cloudflare browser verification
+
+The real `bpp-pin-integration-test-api` Worker and its new `bpp-pin-integration-test` D1 were used with **synthetic test records only**; neither the live production Worker/database nor the existing staging Worker/database was modified.
+
+Verified in browser screenshots:
+- Six-digit PIN login and server-side `/api/auth/me` verification.
+- Full Management Suite opened with PIN authentication and showed **zero** original work orders.
+- Created synthetic `WO-2026-001`; record persisted through refresh and later edits (High then Routine).
+- Administrator and ordinary test-user roles identified correctly by Management Suite.
+- Ordinary user could save a work order but did not have `Manage Users` UI.
+- Real API role-escalation, bootstrap and restore probes returned HTTP 403; state revision remained unchanged at **5** and PIN hashes were not exposed in returned state.
+- Admin PIN reset: former ordinary-user PIN rejected, replacement accepted.
+- Deactivated user rejected; an already-open ordinary-user tab required reauthentication after refreshing. **Immediate rejection without refreshing was not directly shown in browser**, so a separate Worker emulator integration test now asserts server-side token revocation without reload.
+- Synthetic test account reactivated as a later test step; no production account was used.
+
+The isolated full Suite bridge required two corrections: align the legacy Suite's audit identity storage key with the server PIN identity, and suppress the old client-side PIN sign-in startup. The corrected bridge is in `ISOLATED_TEST_BRIDGE.js`, separate from the production candidate.
+
+Expanded `miniflare-d1.integration.test.mjs` to test server-side session rejection immediately after account deactivation, PIN reset and role-protected bootstrap/restore. CI passed on branch at [GitHub Actions run 41881075096](https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41881075096) (subsequent commits may require re-run).
+
+### Remaining release blockers after the successful rehearsal
+1. **Production credential design:** the original production candidate attempts 310,000 PBKDF2 iterations in one WebCrypto call, rejected by the actual deployed Cloudflare test Worker. The separate test-only version uses 100,000 for compatibility; this is not an approved production credential-hardening solution. A six-digit PIN is inherently low-entropy; use server-kept pepper, rate limits, secure KDF and controlled forced reset strategy.
+2. **Fast hashes retained in historical production state:** current `state_json` and historical `state_revisions` hold legacy salted SHA-256 PIN digests. A slow verifier written to another table does not remove the weakness while fast hashes remain readable in D1 backups.
+3. **Privileged shared token:** `ACCESS_TOKEN` remains an administrator-equivalent bypass. Design and rehearse cutover/rollback/rotation without this becoming a permanent security exception.
+4. **Production-specific frontend:** the isolated bridge uses a separate Worker origin, a synthetic dataset and a pinned copy of the older Suite. The production launcher/bridge still needs a tested release candidate with the corrected session behavior and non-disruptive current-app data modules.
+5. **Fresh production D1 backup and state baseline:** November 3 snapshot revision 187 is not evidence of present-day production state. Take a verified fresh export, compare counts and checksums before production migration and ensure code-only rollback.
+6. **Admin PIN lifecycle:** ensure proper server-only PIN operations, enforce role-aware requests, and define migration of existing user accounts; do not hand a normal browser a shared destructive admin token.
+
+**Status: TESTED FUNCTIONALITY, PRODUCTION CUTOVER STILL BLOCKED.** No production deploy, migration, or token change authorized.
