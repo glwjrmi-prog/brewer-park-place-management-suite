@@ -103,6 +103,37 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  assert.equal(after.data.data.groundsProjects.length,1);
  const historical=await db.prepare('SELECT count(*) AS n FROM state_revisions').first();
  assert.equal(historical.n,1);
+ // Server-side session invalidation must work without a browser refresh.
+ // A user already holding a token must lose access when an administrator deactivates them.
+ const beforeDisable=structuredClone(after.data.data);
+ beforeDisable._access.users.find(u=>u.id==='viewer').active=false;
+ const disabled=await post('/api/state',{baseRevision:2,data:beforeDisable,reason:'Synthetic account deactivation'},adminLogin.data.token);
+ assert.equal(disabled.res.status,200,JSON.stringify(disabled.data));
+ assert.equal((await get('/api/state',login.data.token)).res.status,401,'Deactivated user session remained valid');
+ const deniedLogin=await post('/api/auth/login',{name:'Test User',pin:'654321'});
+ assert.notEqual(deniedLogin.res.status,200,'Deactivated account was allowed to sign in');
+ // Reactivate user and change their PIN; the previously issued session must stay invalid.
+ const afterDisable=await get('/api/state',adminLogin.data.token);
+ const changed=structuredClone(afterDisable.data.data);
+ const viewer=changed._access.users.find(u=>u.id==='viewer');
+ viewer.active=true;
+ viewer.salt='3'.repeat(32);
+ viewer.pinHash=await hash(viewer.salt+'|789456');
+ const changedPin=await post('/api/state',{baseRevision:3,data:changed,reason:'Synthetic reset and reactivate'},adminLogin.data.token);
+ assert.equal(changedPin.res.status,200,JSON.stringify(changedPin.data));
+ assert.equal((await get('/api/state',login.data.token)).res.status,401,'Old session survived PIN reset');
+ const oldPin=await post('/api/auth/login',{name:'Test User',pin:'654321'});
+ assert.notEqual(oldPin.res.status,200,'Old PIN remained usable after reset');
+ const newPin=await post('/api/auth/login',{name:'Test User',pin:'789456'});
+ assert.equal(newPin.res.status,200,JSON.stringify(newPin.data));
+ assert.equal((await get('/api/auth/me',newPin.data.token)).data.user.role,'user');
+ // Ordinary user cannot use another user's PIN session to operate administrative endpoints.
+ const blockedRestore=await post('/api/restore',{baseRevision:4,revision:1},newPin.data.token);
+ assert.equal(blockedRestore.res.status,403);
+ const blockedBootstrap=await post('/api/bootstrap',{data:{}},newPin.data.token);
+ assert.equal(blockedBootstrap.res.status,403);
+ const latest=await get('/api/state',adminLogin.data.token);
+ assert.equal(latest.data.revision,4,'Forbidden requests changed the authoritative revision');
  // Logged-out sessions cannot read protected state.
  const logout=await post('/api/auth/logout',{},adminLogin.data.token);
  assert.equal(logout.res.status,200);
