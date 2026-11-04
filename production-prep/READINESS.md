@@ -9,6 +9,15 @@
 - Staging remains a separate, older database: never use its records as production source.
 - Source reviewed: `staging-auth/BPP_Staging_PIN_Auth_Worker_2026-11-03.js` and `staging/data-safety/site/staging-bridge.js` on staging branch. These are not approved for production deployment unchanged.
 
+## Engineering work completed November 4, 2026
+- Created `WORKER_AUTH_CANDIDATE.js` on this preparation branch, separate from the live staging and production Workers.
+- New candidate migrates matching legacy PINs to PBKDF2-SHA256 (310,000 iterations) when a user next signs in; stores a new verifier in `pin_credentials`, while retaining legacy PIN hashes pending an explicit final phase-out.
+- Session tokens go into a separate `pin_sessions_v2` table with an account fingerprint. Resetting a PIN, changing a role, or deactivating an account invalidates previously issued v2 tokens on the next request.
+- Additive migration is in `SCHEMA_V2.sql`; it must first be tested on a disposable D1 copy.
+- Synthetic Node tests are in `auth-candidate.test.mjs`. GitHub Actions syntax check and all synthetic tests **passed** November 4, 2026: https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/41826522342
+- **NOT DEPLOYABLE YET.** Tests do not constitute live D1 integration testing, nor do they demonstrate full production compatibility. The legacy fast SHA-256 hashes remain in state and must be retired using a coordinated server-side PIN management migration, not merely hidden from responses.
+- A fresh read of the actual production Cloudflare Worker source and a fresh read-only production D1 baseline remain necessary. The GitHub repo contains the current website's launcher and staging Worker, not a verified copy of the currently deployed production Worker.
+
 ## Blocking security requirements — MUST resolve before live deployment
 1. **Six-digit PIN hashing:** existing algorithm uses a per-account salt but is fast `SHA-256(salt + '|' + PIN)`; a six-digit space is small if hashes leak. Use an approved password-based KDF (PBKDF2 with strong parameters, per-account random salts, algorithm/iteration metadata), test migration from legacy hashes or require a controlled PIN reset. Never publish salts/hashes in web responses.
 2. **Server-enforced roles:** test actual API calls (not just hidden UI) for regular-user attempted user add, deactivate, PIN reset, role escalation, `_access` edits, privileged `allowDestructive`, bootstrap/restore; all must be rejected. Validate public state snapshots cannot strip/replace protected secret fields.
