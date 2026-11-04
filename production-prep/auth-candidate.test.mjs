@@ -7,7 +7,8 @@ import worker from './WORKER_AUTH_CANDIDATE.js';
 const crypto = globalThis.crypto || webcrypto;
 const hex = b => [...new Uint8Array(b)].map(n=>n.toString(16).padStart(2,'0')).join('');
 const sha = async t=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)));
-const allowed='https://c5a891d1.bpp-management-suite-staging.pages.dev';
+const allowed='https://glwjrmi-prog.github.io';
+const staging='https://c5a891d1.bpp-management-suite-staging.pages.dev';
 const unrelated='https://attacker.pages.dev';
 const salt='a'.repeat(32);
 async function fixture() {
@@ -45,7 +46,7 @@ async function fixture() {
       return statement;
     }
   };
-  return {db,user,second,env:{DB:db,ACCESS_TOKEN:'private-legacy-test-token',ADMIN_TOKEN:'different-admin-token',ALLOWED_ORIGINS:'https://bpp-management-suite-staging.pages.dev'}};
+  return {db,user,second,env:{DB:db,ACCESS_TOKEN:'private-legacy-test-token',ADMIN_TOKEN:'different-admin-token',ALLOWED_ORIGINS:'https://glwjrmi-prog.github.io'}};
 }
 function request(path,{method='GET',token='',body,origin=allowed}={}) {
   const headers={Origin:origin};if(token)headers.Authorization='Bearer '+token;
@@ -63,8 +64,10 @@ test('preview-origin allowlist rejects unrelated project and allows intended ori
   const {env}=await fixture();
   const yes=await worker.fetch(new Request('https://test.worker/api/auth/login',{method:'OPTIONS',headers:{Origin:allowed}}),env);
   const no=await worker.fetch(new Request('https://test.worker/api/auth/login',{method:'OPTIONS',headers:{Origin:unrelated}}),env);
+  const noStaging=await worker.fetch(new Request('https://test.worker/api/auth/login',{method:'OPTIONS',headers:{Origin:staging}}),env);
   assert.equal(yes.headers.get('access-control-allow-origin'),allowed);
   assert.equal(no.headers.get('access-control-allow-origin'),null);
+  assert.equal(noStaging.headers.get('access-control-allow-origin'),null);
 });
 test('migrates a legacy PIN on first sign-in, verifies subsequent sign-in with PBKDF2',async()=>{
   const {env,db}=await fixture();
@@ -140,4 +143,18 @@ test('regular PIN user cannot delete a protected record through direct save',asy
     baseRevision:1,data,allowDestructive:true,
     deleteIntent:{type:'delete',module:'maintenance',recordId:'WO-2026-080'}}});
   assert.equal(attempt.response.status,422);
+});
+
+test('legacy state compatibility is opt-in, and does not leak PIN verifiers to PIN sessions',async()=>{
+  const {env}=await fixture();
+  const modern=await login(env);
+  assert.equal(modern.response.status,200);
+  env.LEGACY_STATE_COMPAT='true';
+  const legacy=await send(env,'/api/state',{token:'private-legacy-test-token'});
+  assert.equal(legacy.data.data._access.users[0].pinHash.length,64);
+  const current=await send(env,'/api/state',{token:modern.data.token});
+  assert.equal(current.data.data._access.users[0].pinHash,undefined);
+  delete env.LEGACY_STATE_COMPAT;
+  const disabled=await send(env,'/api/state',{token:'private-legacy-test-token'});
+  assert.equal(disabled.data.data._access.users[0].pinHash,undefined);
 });
