@@ -53,7 +53,7 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
   );
   `.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql.replace(/\s+/g,' ')+';');
  const schema=readFileSync('production-prep/SCHEMA_V2.sql','utf8').replace(/^--.*$/gm,'');
- for(const sql of schema.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql+';');
+ for(const sql of schema.split(';').map(q=>q.trim()).filter(Boolean)) await db.exec(sql.replace(/\s+/g,' ')+';');
  const users=[
   {id:'admin',name:'Test Admin',role:'admin',active:true,salt,pinHash:await hash(salt+'|123456')},
   {id:'viewer',name:'Test User',role:'user',active:true,salt:'2'.repeat(32),pinHash:await hash('2'.repeat(32)+'|654321')}
