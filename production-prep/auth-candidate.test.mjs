@@ -14,6 +14,7 @@ async function fixture() {
   const user={id:'usr-1',name:'Test Admin',role:'admin',active:true,salt,pinHash:await sha(salt+'|123456')};
   const second={id:'usr-2',name:'Test User',role:'user',active:true,salt:'b'.repeat(32),pinHash:await sha('b'.repeat(32)+'|654321')};
   const db={accounts:new Map(), attempts:new Map(), creds:new Map(), sessions:new Map(),
+    async batch() {return [{meta:{changes:1}},{meta:{changes:1}},{meta:{changes:1}}]},
     state:{singleton_id:1,revision:1,state_json:JSON.stringify({_access:{users:[user,second]},maintenance:[],projects:[],inspections:[],vendors:[],violations:[]}),checksum:'abc',counts_json:'{}',updated_at:'now',updated_by:'tester',reason:'fixture'},
     prepare(sql) {
       const args={sql,binds:[]};
@@ -107,4 +108,36 @@ test('five incorrect PIN attempts trigger lockout',async()=>{
   const {env}=await fixture();
   for(let i=0;i<5;i++)assert.equal((await login(env,'Test Admin','000000')).response.status,401);
   assert.equal((await login(env,'Test Admin','123456')).response.status,429);
+});
+
+test('legacy single-record deletion requires precise intent and no collateral record edits',async()=>{
+  const {env,db}=await fixture();
+  const d=JSON.parse(db.state.state_json);
+  d.maintenance=[{id:'WO-2026-079',status:'Closed',issue:'A'},{id:'WO-2026-080',status:'Open',issue:'B'}];
+  db.state.state_json=JSON.stringify(d);
+  const after=structuredClone(d);after.maintenance.pop();
+  const payload={baseRevision:1,data:after,allowDestructive:true,
+    deleteIntent:{type:'delete',module:'maintenance',recordId:'WO-2026-080'}};
+  const denied=await send(env,'/api/state',{method:'POST',token:'private-legacy-test-token',
+    body:{...payload,deleteIntent:{...payload.deleteIntent,recordId:'WO-2026-079'}}});
+  assert.equal(denied.response.status,422);
+  const tampered=structuredClone(after);tampered.maintenance[0].issue='Tampered';
+  const blocked=await send(env,'/api/state',{method:'POST',token:'private-legacy-test-token',
+    body:{...payload,data:tampered}});
+  assert.equal(blocked.response.status,422);
+  const legacy=await send(env,'/api/state',{method:'POST',token:'private-legacy-test-token',body:payload});
+  assert.equal(legacy.response.status,200);
+  assert.equal(legacy.data.ok,true);
+});
+test('regular PIN user cannot delete a protected record through direct save',async()=>{
+  const {env,db}=await fixture();
+  const who=await login(env,'Test User','654321');assert.equal(who.response.status,200);
+  const d=JSON.parse(db.state.state_json);
+  d.maintenance=[{id:'WO-2026-079',status:'Closed'},{id:'WO-2026-080',status:'Open'}];
+  db.state.state_json=JSON.stringify(d);
+  const data=structuredClone(d);data.maintenance.pop();
+  const attempt=await send(env,'/api/state',{method:'POST',token:who.data.token,body:{
+    baseRevision:1,data,allowDestructive:true,
+    deleteIntent:{type:'delete',module:'maintenance',recordId:'WO-2026-080'}}});
+  assert.equal(attempt.response.status,422);
 });
