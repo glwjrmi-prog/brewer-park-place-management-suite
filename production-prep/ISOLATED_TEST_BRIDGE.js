@@ -1,3 +1,4 @@
+// Existing Suite auditRequireUser uses BPPMS_AUTH_USER_ID; the isolated bridge must populate that key only after server verification.
 // ISOLATED TEST ONLY. Never connect this bridge to production or staging databases.
 (function(){if(window.location.origin!=='https://bpp-pin-integration-test-api.glwjrmi.workers.dev' || window.location.pathname!=='/test-suite'){document.body.textContent='Isolated BPP test bridge refused to run on this address.';throw new Error('Isolated test origin required')}})();
 // Brewer Park Place Management Suite — Full Suite isolated D1 test bridge
@@ -336,7 +337,7 @@
     try{
       // Staging PIN login. No shared key is requested or written to localStorage.
       const SESSION_KEY='BPPMS_PIN_ISOLATED_USER_SESSION';
-      const USER_KEY='BPPMS_PIN_ISOLATED_USER_ID';
+      const USER_KEY='BPPMS_AUTH_USER_ID'; // Existing Suite audit identity key; test-origin sessionStorage remains isolated.
       async function verifySession(token){
         v9Key=token;
         try { const r=await v9Api('/api/auth/me');return r.user||null; }
