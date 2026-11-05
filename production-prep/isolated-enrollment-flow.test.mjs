@@ -80,6 +80,11 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  assert.equal(login.res.status,200,JSON.stringify(login.data));
  const admin=await post('/api/auth/login',{name:'Test Admin',pin:'123456'});
  assert.equal(admin.res.status,200,JSON.stringify(admin.data));
+ const isolatedSuite=await mf.dispatchFetch('https://bpp-pin-integration-test-api.glwjrmi.workers.dev/test-suite',{method:'GET'});
+ assert.equal(isolatedSuite.status,200,'Full isolated Suite loader was unavailable');
+ const suiteHtml=await isolatedSuite.text();
+ assert.match(suiteHtml,/ISOLATED TEST — NO LIVE BPP RECORDS/);
+ assert.match(suiteHtml,/ISOLATED_SECURE_ENROLLMENT_BRIDGE\.js/);
  const enrollPage=await mf.dispatchFetch('https://bpp-pin-integration-test-api.glwjrmi.workers.dev/test-enroll',{method:'GET'});
  assert.equal(enrollPage.status,200);
  const enrollmentHtml=await enrollPage.text();
