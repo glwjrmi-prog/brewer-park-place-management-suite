@@ -879,6 +879,9 @@ async function resetUserPin(request, env, cors, principal) {
     return json({ok:false,error:'Credential-only migration required'},409,cors);
   const target=users.find(u=>u.id===id);
   if (!target) return json({ok:false,error:'Account not found'},404,cors);
+  // Board administrators cannot reset or impersonate the designated system owner.
+  if (env.SYSTEM_ADMIN_USER_ID && id===env.SYSTEM_ADMIN_USER_ID && principal.id!==id)
+    return json({ok:false,error:'System administrator authorization required'},403,cors);
   const salt=randomHex(24);
   const verifier=await pbkdf2Pin(pin,salt,PBKDF2_ITERATIONS,env,id);
   const at=Date.now();
@@ -914,6 +917,15 @@ function mergeAndAuthorizeAccess(current, proposed, principal, env) {
   const before = current?._access?.users || [];
   const after = proposed?._access?.users || [];
   if (!Array.isArray(after)) return 'Invalid user data';
+  // Lock the identity, role, name and active status of the single owner account.
+  // Other administrators may manage board members but cannot seize this account.
+  if (env.SYSTEM_ADMIN_USER_ID && principal.id!==env.SYSTEM_ADMIN_USER_ID) {
+    const previousOwner=before.find(u=>u.id===env.SYSTEM_ADMIN_USER_ID);
+    const proposedOwner=after.find(u=>u.id===env.SYSTEM_ADMIN_USER_ID);
+    if (!previousOwner || !proposedOwner ||
+        JSON.stringify(previousOwner)!==JSON.stringify(proposedOwner))
+      return 'Only the system administrator may modify the system administrator account';
+  }
   const saved = new Map(before.map(u => [u.id,u]));
   // Read-only, secret-stripped profiles are compared to detect non-admin edits.
   const oldPublic = JSON.stringify((current?._access?.users || []).map(u => {
