@@ -465,9 +465,21 @@
       const originalShowAccount=accessShowAccount;
       accessShowAccount=function(...args){
         originalShowAccount(...args);
-        if(currentUser.canViewActivity!==true)return;
         const actions=document.querySelector('#bppAccessOverlay .bppAccessActions');
         if(!actions)return;
+        // Both account roles get an explicit server-side Sign Out control.
+        // Switch User continues using the same revocation path.
+        const signOut=document.createElement('button');
+        signOut.className='secondary';
+        signOut.type='button';
+        signOut.textContent='Sign Out';
+        signOut.onclick=async()=>{
+          signOut.disabled=true;
+          signOut.textContent='Signing Out…';
+          await accessSignOut();
+        };
+        actions.prepend(signOut);
+        if(currentUser.canViewActivity!==true)return;
         const b=document.createElement('button');
         b.className='secondary';b.textContent='Private Activity Log';
         b.onclick=async()=>{
