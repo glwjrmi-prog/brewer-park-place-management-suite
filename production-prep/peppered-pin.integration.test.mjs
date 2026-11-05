@@ -195,12 +195,12 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
               'Board administrator unexpectedly viewed System Administrator private log');
  const protectedReset=await post('/api/admin/pin-reset',{userId:'admin',pin:'456123'},boardLogin.data.token);
  assert.equal(protectedReset.res.status,403,'Board administrator reset system-owner PIN');
- const protectedState=(await get('/api/state',boardLogin.data.token)).data;
- const changedOwner=structuredClone(protectedState.data);
+ const boardOwnerState=(await get('/api/state',boardLogin.data.token)).data;
+ const changedOwner=structuredClone(boardOwnerState.data);
  changedOwner._access.users.find(u=>u.id==='admin').name='Board Admin Impersonation';
  const protectedWrite=await post('/api/state',{baseRevision:6,data:changedOwner},boardLogin.data.token);
  assert.equal(protectedWrite.res.status,403,'Board administrator renamed system owner');
- const deactivatedOwner=structuredClone(protectedState.data);
+ const deactivatedOwner=structuredClone(boardOwnerState.data);
  deactivatedOwner._access.users.find(u=>u.id==='admin').active=false;
  assert.equal((await post('/api/state',{baseRevision:6,data:deactivatedOwner},boardLogin.data.token)).res.status,403,
               'Board administrator deactivated system owner');
