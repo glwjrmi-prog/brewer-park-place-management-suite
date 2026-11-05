@@ -467,8 +467,11 @@
         originalShowAccount(...args);
         const actions=document.querySelector('#bppAccessOverlay .bppAccessActions');
         if(!actions)return;
-        // Both account roles get an explicit server-side Sign Out control.
-        // Switch User continues using the same revocation path.
+        // Sign Out is the single, server-revoking exit action for either role.
+        // Remove only the redundant Switch User button from this account dialog.
+        for(const button of actions.querySelectorAll('button')){
+          if(button.textContent?.trim()==='Switch User')button.remove();
+        }
         const signOut=document.createElement('button');
         signOut.className='secondary';
         signOut.type='button';
