@@ -70,3 +70,24 @@ test('never ship test-only routes or open enrollment without operator setting',(
  assert.match(worker,/PIN_ENROLLMENT_OPEN === 'enabled'/);
  assert.match(worker,/url\.hostname === 'bpp-management-suite-production-api\.glwjrmi\.workers\.dev'/);
 });
+
+test('explicit temporary legacy compatibility keeps the existing production website working until the client switches',async t=>{
+ const mf=new Miniflare({compatibilityDate:'2026-10-01',modules:true,scriptPath:source,d1Databases:['DB'],
+  bindings:{PIN_ENROLLMENT_OPEN:'enabled',LEGACY_ADMIN_ROLLBACK:'enabled',LEGACY_STATE_COMPAT:'true',
+    PIN_PEPPER:'another-synthetic-test-only-pepper-with-long-random-placeholder',
+    ACCESS_TOKEN:'legacy-web-key',ADMIN_TOKEN:'test-admin',ALLOWED_ORIGINS:origin}});
+ t.after(()=>mf.dispose());
+ const db=await mf.getD1Database('DB');
+ await db.exec('CREATE TABLE current_state(singleton_id INTEGER PRIMARY KEY,revision INTEGER,state_json TEXT,checksum TEXT,counts_json TEXT,updated_at TEXT,updated_by TEXT,reason TEXT);');
+ await db.exec('CREATE TABLE pin_sessions_v2(token_hash TEXT PRIMARY KEY,user_id TEXT,expires_at INTEGER,created_at INTEGER,account_fingerprint TEXT);');
+ const state={_access:{users:[{id:'a',name:'Synthetic Owner',active:true,role:'admin',pinHash:'f'.repeat(64),salt:'1'.repeat(32)}]},
+    maintenance:[],projects:[],vendors:[],violations:[],inspections:[],knowledgeBase:[],groundsProjects:[]};
+ const serialized=JSON.stringify(state);
+ await db.prepare("INSERT INTO current_state VALUES(1,187,?,?,?,'now','system','original')").bind(serialized,await hash(serialized),'{}').run();
+ const res=await mf.dispatchFetch(host+'/api/state',{headers:{Authorization:'Bearer legacy-web-key',Origin:origin}});
+ assert.equal(res.status,200,'Old live client would fail during the transitional Worker rollout');
+ const body=await res.json();
+ assert.equal(body.data._access.users[0].pinHash,'f'.repeat(64),'Legacy client requires existing profile during brief transition');
+ const shouldNotModify=await db.prepare('SELECT revision FROM current_state').first();
+ assert.equal(shouldNotModify.revision,187);
+});
