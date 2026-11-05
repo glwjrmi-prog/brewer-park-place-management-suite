@@ -154,3 +154,13 @@ Expanded `miniflare-d1.integration.test.mjs` to test server-side session rejecti
 - Created two entirely synthetic peppered PIN verifier rows using random test PINs and a temporary random pepper for the cloned accounts; these are **not enrolled production credentials**, and the pepper/PINs were not exported.
 - Discovered that the original pinned full-suite HTML's Add User and Reset PIN workflows still compute SHA-256 verifiers client-side; production frontend must be changed to use server-side credential APIs. Current experimental worker has a server-side reset endpoint, but user-add integration has **not** been completed or accepted.
 - **Release remains blocked** on secure credential enrollment of both real accounts, end-to-end full-suite management flows and real Cloudflare Worker clone rehearsal. No production changes made.
+
+## November 5 full-Suite release integration checkpoint
+
+- On separate prep branch, created `ISOLATED_SECURE_ENROLLMENT_BRIDGE.js`, derived from the secure production bridge but hard-bound to the existing isolated test Worker origin and `/test-suite` path; it cannot connect to the production Worker. The counterpart `ISOLATED_SECURE_ENROLLMENT_LOADER.html` reuses the pinned full Suite UI and patch modules.
+- Added a hostname- and TEST_MODE-gated `/test-suite` page route to `WORKER_PIN_ENROLLMENT_TEST.js`. The existing test database remains separate.
+- Integrated the in-Suite **Add User** and **Reset PIN** screens with server-only credential operations. The owner's private activity screen retrieves `/api/admin/activity` only after the Worker returns the precise `SYSTEM_ADMIN_USER_ID` entitlement. Fixed a first-login bug so the immediate verification result, including `canViewActivity`, is used by the interface without requiring a reload.
+- Added CI checks that the isolated full Suite uses the secure bridge, is hostname-locked, and does not construct browser-side PIN hashes.
+- GitHub Actions run https://github.com/glwjrmi-prog/brewer-park-place-management-suite/actions/runs/42046022341 completed successfully.
+- **Still unverified:** Actual full-Suite browser behavior against the currently deployed isolated Cloudflare Worker until the latest isolated Worker is deployed and `/test-suite` is opened. GitHub CI alone cannot substitute for this. Also: real production account enrollment, production secret, final D1 backup and state delta, final production website cutover and rollback verification remain undone.
+- **Strict hold:** Do not update GitHub Pages `main`, `bpp-management-suite-production-api`, or `bpp-management-suite-production` until those gates pass and operator approves the exact rollout.
