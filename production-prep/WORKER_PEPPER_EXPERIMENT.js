@@ -389,7 +389,7 @@ async function saveState(request, env, cors, principal) {
 
   const currentData = JSON.parse(current.state_json);
   // Never accept a client-provided actor or unverified account modifications.
-  const accessCheck = mergeAndAuthorizeAccess(currentData, body.data, principal);
+  const accessCheck = mergeAndAuthorizeAccess(currentData, body.data, principal, env);
   if (accessCheck) return json({ ok: false, error: accessCheck }, 403, cors);
   // A partial/old client must never silently erase a top-level data module.
   // A privileged, explicit restore remains available through its separate endpoint.
@@ -671,16 +671,24 @@ async function loginWithPin(request, env, cors) {
   let valid = false;
   const expected = user?.pinHash || '';
   const legacySalt = String(user?.salt || '');
-  // The existing database has SHA-256 PIN digests. Use those only to verify
-  // legacy credentials and to migrate on first successful sign-in.
-  if (user && /^[0-9a-f]{64}$/.test(expected) && /^[0-9a-f]{32}$/.test(legacySalt)) {
+  // Isolated experiment supports BOTH the transitional legacy mode and the
+  // post-sanitization state where user profiles no longer carry fast verifiers.
+  // A source_pin_hash of '' is mandatory after scrub; a stale legacy value
+  // must not be silently accepted or used for offline guessing.
+  if (user) {
     const credential = await env.DB.prepare(
       'SELECT salt,verifier,iterations,source_pin_hash FROM pin_credentials WHERE user_id=?'
     ).bind(user.id).first();
-    if (credential && timingSafeEqualText(String(credential.source_pin_hash), expected)) {
-      const derived = await pbkdf2Pin(pin, credential.salt, Number(credential.iterations), env, user.id);
-      valid = timingSafeEqualText(derived, credential.verifier);
-    } else {
+    const legacyPresent = /^[0-9a-f]{64}$/.test(expected) && /^[0-9a-f]{32}$/.test(legacySalt);
+    const scrubbed = !expected && !legacySalt;
+    if (credential) {
+      const sourceValid = (scrubbed && credential.source_pin_hash === '') ||
+        (legacyPresent && timingSafeEqualText(String(credential.source_pin_hash), expected));
+      if (sourceValid) {
+        const derived = await pbkdf2Pin(pin, credential.salt, Number(credential.iterations), env, user.id);
+        valid = timingSafeEqualText(derived, credential.verifier);
+      }
+    } else if (legacyPresent && env.CREDENTIALS_ONLY !== 'enabled') {
       const actualLegacy = await sha256Hex(legacySalt + '|' + pin);
       valid = timingSafeEqualText(actualLegacy, expected);
       if (valid) {
@@ -710,7 +718,13 @@ async function loginWithPin(request, env, cors) {
     .bind(await sha256Hex(token),user.id,now+AUTH_SESSION_SECONDS*1000,now,await accountFingerprint(user)).run();
   return json({ok:true,token,user:publicUser(user),expiresAt:now+AUTH_SESSION_SECONDS*1000},200,cors);
 }
-function mergeAndAuthorizeAccess(current, proposed, principal) {
+function mergeAndAuthorizeAccess(current, proposed, principal, env) {
+  // Once credential-only storage is enabled, no browser request may supply
+  // legacy fast PIN verifier properties (including new users).
+  if (env.CREDENTIALS_ONLY === 'enabled' &&
+      (proposed?._access?.users || []).some(u =>
+        Object.hasOwn(u,'pinHash') || Object.hasOwn(u,'salt') || Object.hasOwn(u,'passwordHash')))
+    return 'Credential fields must be managed by the server';
   if (!proposed || typeof proposed !== 'object' || Array.isArray(proposed)) return 'Invalid data';
   const before = current?._access?.users || [];
   const after = proposed?._access?.users || [];
