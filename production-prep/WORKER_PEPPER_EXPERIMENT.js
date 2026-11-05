@@ -58,6 +58,16 @@ export default {
         return json({ ok: true }, 200, cors);
       }
 
+      if (url.pathname === "/api/admin/user-create" && request.method === "POST") {
+        if (principal.legacy || principal.role !== 'admin')
+          return json({ok:false,error:'Administrator PIN session required'},403,cors);
+        return createCredentialUser(request,env,cors,principal);
+      }
+      if (url.pathname === "/api/admin/activity" && request.method === "GET") {
+        if (!env.SYSTEM_ADMIN_USER_ID || principal.id !== env.SYSTEM_ADMIN_USER_ID)
+          return json({ok:false,error:'System administrator only'},403,cors);
+        return readAdminActivity(url,env,cors);
+      }
       if (url.pathname === "/api/admin/pin-reset" && request.method === "POST") {
         if (principal.legacy || principal.role !== 'admin') {
           return json({ok:false,error:'Administrator PIN session required'},403,cors);
@@ -726,6 +736,55 @@ async function loginWithPin(request, env, cors) {
   await env.DB.prepare('INSERT INTO pin_sessions_v2(token_hash,user_id,expires_at,created_at,account_fingerprint) VALUES(?,?,?,?,?)')
     .bind(await sha256Hex(token),user.id,now+AUTH_SESSION_SECONDS*1000,now,await accountFingerprint(user)).run();
   return json({ok:true,token,user:publicUser(user),expiresAt:now+AUTH_SESSION_SECONDS*1000},200,cors);
+}
+async function createCredentialUser(request, env, cors, principal) {
+  if (Number(request.headers.get('content-length')||0)>4096)
+    return json({ok:false,error:'Request too large'},413,cors);
+  let body;
+  try { body=await request.json(); }
+  catch { return json({ok:false,error:'Invalid request'},400,cors); }
+  const name=String(body.name||'').trim();
+  const pin=String(body.pin||'');
+  const role=String(body.role||'');
+  if (name.length<2 || name.length>100 || !['user','admin'].includes(role) ||
+      pin.length!==6 || !Array.from(pin).every(c=>c>='0'&&c<='9'))
+    return json({ok:false,error:'Invalid account details'},400,cors);
+  const row=await currentRow(env);
+  if (!row) return json({ok:false,error:'Database not initialized'},409,cors);
+  const old=JSON.parse(row.state_json);
+  const users=old?._access?.users;
+  if (!Array.isArray(users) || users.length>=100 ||
+      users.some(u=>normalizeName(u.name)===normalizeName(name)))
+    return json({ok:false,error:'Duplicate name or account limit reached'},409,cors);
+  if (users.some(u=>u.pinHash||u.salt||u.passwordHash))
+    return json({ok:false,error:'Credential migration required'},409,cors);
+  const id='usr-'+randomHex(16);
+  const actor=actorName(principal.name),now=new Date().toISOString();
+  const changed=structuredClone(old);
+  changed._access.users.push({id,name,role,active:true,createdAt:now,createdBy:actor});
+  const nextRevision=Number(row.revision)+1;
+  const stamped=stampState(changed,nextRevision,actor);
+  const stateJson=JSON.stringify(stamped);
+  const checksum=await sha256Text(stateJson);
+  const countsJson=JSON.stringify(recordCounts(stamped));
+  const salt=randomHex(24);
+  const verifier=await pbkdf2Pin(pin,salt,PBKDF2_ITERATIONS,env,id);
+  try {
+    const batch=await env.DB.batch([
+      env.DB.prepare('INSERT INTO state_revisions(revision,state_json,checksum,counts_json,saved_at,saved_by,reason) SELECT revision,state_json,checksum,counts_json,updated_at,updated_by,reason FROM current_state WHERE singleton_id=1 AND revision=?').bind(row.revision),
+      env.DB.prepare("UPDATE current_state SET revision=?,state_json=?,checksum=?,counts_json=?,updated_at=?,updated_by=?,reason='Add authorized user' WHERE singleton_id=1 AND revision=?").bind(nextRevision,stateJson,checksum,countsJson,now,actor,row.revision),
+      env.DB.prepare("INSERT INTO pin_credentials(user_id,salt,verifier,iterations,source_pin_hash,updated_at) VALUES(?,?,?,?,'',?)").bind(id,salt,verifier,PBKDF2_ITERATIONS,Date.now()),
+      env.DB.prepare("INSERT INTO audit_events(event_type,revision,actor,created_at,details_json) VALUES('user-created',?,?,?,?)").bind(nextRevision,actor,now,JSON.stringify({accountId:id,role}))
+    ]);
+    if (Number(batch?.[1]?.meta?.changes??batch?.[1]?.changes??0)!==1)
+      return json({ok:false,error:'Concurrent change'},409,cors);
+  }catch{return json({ok:false,error:'Account creation conflict'},409,cors)}
+  return json({ok:true,user:{id,name,role,active:true},revision:nextRevision},201,cors);
+}
+async function readAdminActivity(url,env,cors){
+  const limit=Math.min(100,Math.max(1,Number(url.searchParams.get('limit')||50)));
+  const rows=await env.DB.prepare('SELECT event_type,revision,actor,created_at,details_json FROM audit_events ORDER BY id DESC LIMIT ?').bind(limit).all();
+  return json({ok:true,events:(rows.results||[]).map(r=>({action:r.event_type,revision:r.revision,actor:r.actor,at:r.created_at,details:JSON.parse(r.details_json||'{}')}))},200,cors);
 }
 async function resetUserPin(request, env, cors, principal) {
   // This endpoint is intentionally unavailable before legacy credentials have
