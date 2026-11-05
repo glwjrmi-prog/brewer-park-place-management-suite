@@ -1,5 +1,5 @@
 -- BPP PIN authentication candidate: additive D1 schema only.
--- These are NEW tables. Neither table replaces the current_state/revision/audit tables.
+-- These are NEW authentication tables. None replaces current_state/state_revisions/audit_events.
 -- Run against a separately backed-up STAGING TEST DATABASE first.
 -- Do NOT run against production until the complete release is approved.
 CREATE TABLE IF NOT EXISTS pin_credentials (
@@ -22,5 +22,12 @@ CREATE INDEX IF NOT EXISTS idx_pin_sessions_v2_user
 CREATE INDEX IF NOT EXISTS idx_pin_sessions_v2_expiry
   ON pin_sessions_v2(expires_at);
 
--- Existing pin_sessions and pin_attempts tables are intentionally left untouched.
--- The candidate can use existing pin_attempts. Do not remove them in rollout.
+-- Production legacy database has no pin_attempts table; create it additively.
+-- IF NOT EXISTS also preserves any previously installed test/staging table.
+CREATE TABLE IF NOT EXISTS pin_attempts (
+  identifier TEXT PRIMARY KEY,
+  failures INTEGER NOT NULL DEFAULT 0,
+  locked_until INTEGER NOT NULL DEFAULT 0
+);
+
+-- Never drop historical association data or preexisting authentication tables.
