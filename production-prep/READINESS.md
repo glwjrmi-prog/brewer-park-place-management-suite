@@ -123,3 +123,26 @@ Expanded `miniflare-d1.integration.test.mjs` to test server-side session rejecti
 6. **Admin PIN lifecycle:** ensure proper server-only PIN operations, enforce role-aware requests, and define migration of existing user accounts; do not hand a normal browser a shared destructive admin token.
 
 **Status: TESTED FUNCTIONALITY, PRODUCTION CUTOVER STILL BLOCKED.** No production deploy, migration, or token change authorized.
+
+## November 4: uploaded live SQL backup and credential migration rehearsal
+
+- The privately uploaded Wrangler export `bpp-production-backup-2026-11-04.sql` was loaded into **in-memory SQLite only**, never committed to GitHub or imported to a Cloudflare database.
+- `PRAGMA integrity_check` returned `ok`. Current revision **187**, historical revision rows **186**, audit events **187**, work orders **72**, vendors **41**, projects **11**, knowledge base **4**.
+- All **187** current/historical state JSON SHA-256 checksums verified. They collectively include **192** legacy fast-hash PIN values. Two account profiles exist in current state.
+- A credential-only historical scrub was rehearsed in memory on the uploaded export: **192** PIN hash entries removed, all **187** rewritten checksum values verified, all non-credential HOA state unchanged, database row counts and structure preserved, integrity check passed. **Original SQL file not modified**.
+- `credential_migration_rehearsal.py` and associated synthetic tests run on the preparation branch; **this is not executable production migration authorization**.
+- The experimental Worker now supports PIN login after legacy user-profile salts/hashes are removed, provided `pin_credentials.source_pin_hash` has been cleared. Tests demonstrate both synthetic accounts still log in after scrub.
+- A separate server-side administrator PIN reset API `POST /api/admin/pin-reset` uses a peppered verifier, atomically revokes active sessions, audits the reset and returns no plaintext PIN. Strict credential-only state blocks browser submissions of weak hash fields. Synthetic integration tests exercise allowed/denied resets and old-session rejection.
+- `credential_cutover_guard.py` refuses release if any active account has no server verifier, hashes remain in history or verifier table, history checksums mismatch, or the active admin is missing. Its synthetic tests pass.
+- **The real November 4 backup has none of the new `pin_credentials` or `pin_sessions_v2` tables. Its 2 active accounts are therefore NOT yet migrated/enrolled. Cutover remains BLOCKED.**
+- Source branch: `bpp-pin-production-prep-2026-11-04`. Live GitHub Pages main branch, live production Worker and live D1 remain unchanged.
+
+### Remaining explicit release work
+
+1. Create a Cloudflare-isolated **realistic production-shaped D1 clone** from private backup (never put SQL or secrets in GitHub) and add the credential schema.
+2. Enroll or reset **both** real accounts into server-only peppered verifiers; do not rely on public/client-generated fast hashes or assume passwords can be recovered from stored digests. PIN reset UI and existing Manage Users workflows must be integrated and verified.
+3. Scrub only credential fields from current and all history revisions; eliminate `source_pin_hash`, verify checksums/counts, and verify login without legacy material.
+4. Test current production website integration, server-only credential CRUD, roles, backup and **code-only** rollback on isolated clone. The latest prototype test is not an actual production Cloudflare runtime deployment, so do not overstate compatibility.
+5. Ensure old shared token bypass and legacy compatibility gates are permanently disabled, confirm Cloudflare secret provisioning and safeguards; then check real production state against a fresh pre-cutover baseline and request explicit deployment approval.
+
+**Status: HISTORICAL CREDENTIAL SCRUB REHEARSAL PASSED; PRODUCTION CUTOVER BLOCKED ON REAL ACCOUNT ENROLLMENT AND FULL CLONE REHEARSAL.**
