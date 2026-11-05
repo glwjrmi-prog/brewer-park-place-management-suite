@@ -480,14 +480,62 @@
             const root=document.getElementById('bppPrivateActivity');
             if(!root)return;
             root.textContent='';
-            for(const event of (result.events||[])){
-              const line=document.createElement('p');
-              line.style.cssText='padding:9px 0;border-bottom:1px solid #ddd;white-space:pre-wrap';
-              line.textContent=[event.at||'',event.actor||'Unknown',event.action||'Change',
-                event.revision==null?'':'Revision '+event.revision,
-                JSON.stringify(event.details||{})].filter(Boolean).join(' | ');
-              root.appendChild(line);
+            const friendlyAction={
+              'save':'Record updated','user-created':'User added',
+              'pin-reset':'PIN reset','test-enrollment-confirmed':'Test sign-in confirmed',
+              'bootstrap':'Database initialized','restore':'Database restored'
+            };
+            const headers=['Date','User','Action','Record','Changes'];
+            const table=document.createElement('table');
+            table.style.cssText='width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed';
+            table.setAttribute('aria-label','Recent private activity');
+            const head=document.createElement('thead');
+            const headRow=document.createElement('tr');
+            for(const heading of headers){
+              const cell=document.createElement('th');
+              cell.scope='col';cell.textContent=heading;
+              cell.style.cssText='text-align:left;padding:10px 7px;border-bottom:2px solid #b7cbbd;overflow-wrap:anywhere';
+              headRow.appendChild(cell);
             }
+            head.appendChild(headRow);table.appendChild(head);
+            const tbody=document.createElement('tbody');
+            for(const event of (result.events||[])){
+              const details=event.details||{};
+              const changes=Array.isArray(details.changes)?details.changes:[];
+              const record=changes.length
+                ?changes.map(change=>[change.module,change.id].filter(Boolean).join(' / ')).join('; ')
+                :(details.accountId||details.userId||'—');
+              const summaries=changes.flatMap(change=>{
+                if(change.action==='created')return ['Created '+(change.module||'record')];
+                if(change.action==='deleted')return ['Deleted '+(change.module||'record')];
+                return (change.fields||[]).map(field=>{
+                  const before=field.before,after=field.after;
+                  return field.field+(before!==undefined && after!==undefined
+                    ?': '+before+' → '+after:' changed');
+                });
+              });
+              const description=summaries.join('; ')||details.reason||
+                (event.action==='pin-reset'?'Credential reset':
+                 event.action==='user-created'?'Account added':'—');
+              const at=event.at?new Date(event.at):null;
+              const dateLabel=at&&!Number.isNaN(at.getTime())
+                ?at.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}):'—';
+              const values=[dateLabel,event.actor||'Unknown',
+                friendlyAction[event.action]||event.action||'Change',record,description];
+              const tr=document.createElement('tr');
+              for(const value of values){
+                const cell=document.createElement('td');
+                cell.textContent=String(value);
+                cell.style.cssText='padding:10px 7px;border-bottom:1px solid #dce5df;vertical-align:top;overflow-wrap:anywhere';
+                tr.appendChild(cell);
+              }
+              tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+            const scroller=document.createElement('div');
+            scroller.style.cssText='overflow-x:auto;width:100%;margin-top:8px';
+            table.style.minWidth='560px';
+            scroller.appendChild(table);root.appendChild(scroller);
             if(!(result.events||[]).length)root.textContent='No activity recorded yet.';
           }catch(e){const root=document.getElementById('bppPrivateActivity');if(root)root.textContent='Activity log unavailable: '+e.message;}
         };
