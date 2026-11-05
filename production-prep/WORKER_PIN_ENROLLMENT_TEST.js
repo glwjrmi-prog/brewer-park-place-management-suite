@@ -966,7 +966,7 @@ function mergeAndAuthorizeAccess(current, proposed, principal, env) {
 }
 
 function testEnrollmentHtml(){
-  return \`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BPP Isolated PIN Enrollment Test</title>
 <style>body{font:16px system-ui,sans-serif;max-width:660px;margin:2rem auto;padding:0 1rem;color:#183c2b}
 label{display:block;margin:12px 0}input,select{display:block;padding:11px;border-radius:6px;border:1px solid #8c9b93;max-width:100%;box-sizing:border-box;width:350px}
@@ -1026,7 +1026,7 @@ by('scrub').onclick=()=>run(async()=>{
   const r=await api('/test/scrub',{});token='';sessionStorage.removeItem('bppEnrollmentTestToken');
   output('Isolated test credential cleanup completed. Sign in again.',r);
 });
-</script></html>\`;
+</script></html>`;
 }
 async function scrubSyntheticCredentials(env,cors) {
   const row=await currentRow(env);
