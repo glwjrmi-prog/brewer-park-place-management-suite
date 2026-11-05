@@ -406,6 +406,91 @@
       document.title='Brewer Park Place Management Suite — Protected Cloud';
       v9OverlayClose();
       v9StartPolling();
+      // Replace the old client-side SHA-256 account forms with server-only
+      // credential creation/reset. Do not preserve user-entered PIN in state.
+      accessShowUserForm=function(){
+        if (!accessIsAdmin()) return;
+        const body='<div id="bppAccessError" class="bppAccessError"></div>'+
+          '<label>User name<input id="accessNewName" maxlength="100"></label>'+
+          '<label>Role<select id="accessNewRole"><option value="user">Authorized User</option><option value="admin">Board Administrator</option></select></label>'+
+          '<label>Six-digit PIN<input id="accessNewPin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label>'+
+          '<label>Confirm PIN<input id="accessNewPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label>';
+        accessOverlay('Add Authorized User','Server-protected enrollment',body,
+          '<button class="secondary" id="accessNewCancel">Cancel</button><button id="accessNewSave">Add User</button>');
+        document.getElementById('accessNewCancel').onclick=()=>accessShowManager();
+        document.getElementById('accessNewSave').onclick=async()=>{
+          const button=document.getElementById('accessNewSave');
+          const name=document.getElementById('accessNewName').value.trim();
+          const role=document.getElementById('accessNewRole').value;
+          const first=document.getElementById('accessNewPin'),second=document.getElementById('accessNewPin2');
+          const pin=first.value,confirmed=second.value;
+          first.value='';second.value='';
+          if(!/^[0-9]{6}$/.test(pin)||pin!==confirmed)return accessError('Enter the same six-digit PIN twice.');
+          if(name.length<2)return accessError('Enter a name.');
+          button.disabled=true;
+          try{
+            await v9Api('/api/admin/user-create',{method:'POST',body:JSON.stringify({name,role,pin})});
+            v9ApplyRemote(await v9GetState());
+            accessShowManager('Authorized user created securely.');
+          }catch(e){accessError('Unable to add account: '+e.message);button.disabled=false;}
+        };
+      };
+      accessShowResetPin=function(id){
+        if(!accessIsAdmin())return;
+        const user=accessUserById(id);if(!user)return accessShowManager();
+        accessOverlay('Reset User PIN','Server-protected reset',
+          '<div id="bppAccessError" class="bppAccessError"></div>'+
+          '<p>The previous PIN will stop working immediately.</p>'+
+          '<label>New PIN<input id="accessResetPin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label>'+
+          '<label>Confirm PIN<input id="accessResetPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></label>',
+          '<button class="secondary" id="accessResetCancel">Cancel</button><button id="accessResetSave">Reset PIN</button>');
+        document.getElementById('accessResetCancel').onclick=()=>accessShowManager();
+        document.getElementById('accessResetSave').onclick=async()=>{
+          const button=document.getElementById('accessResetSave');
+          const first=document.getElementById('accessResetPin'),second=document.getElementById('accessResetPin2');
+          const pin=first.value,confirmed=second.value;first.value='';second.value='';
+          if(!/^[0-9]{6}$/.test(pin)||pin!==confirmed)return accessError('Enter matching six-digit PINs.');
+          button.disabled=true;
+          try{
+            await v9Api('/api/admin/pin-reset',{method:'POST',body:JSON.stringify({userId:id,pin})});
+            if(id===currentUser.id){await accessSignOut();return;}
+            accessShowManager('PIN changed; all previous user sessions revoked.');
+          }catch(e){accessError('Reset was not completed: '+e.message);button.disabled=false;}
+        };
+      };
+      // The private activity view is server-authorized by a secret-bound
+      // SYSTEM_ADMIN_USER_ID, never by an ordinary administrator role alone.
+      const originalShowAccount=accessShowAccount;
+      accessShowAccount=function(...args){
+        originalShowAccount(...args);
+        if(currentUser.canViewActivity!==true)return;
+        const actions=document.querySelector('#bppAccessOverlay .bppAccessActions');
+        if(!actions)return;
+        const b=document.createElement('button');
+        b.className='secondary';b.textContent='Private Activity Log';
+        b.onclick=async()=>{
+          accessOverlay('Private Activity Log','System Administrator only',
+            '<div id="bppPrivateActivity">Loading recent recorded activity...</div>',
+            '<button id="activityClose">Back</button>');
+          document.getElementById('activityClose').onclick=()=>accessShowAccount();
+          try{
+            const result=await v9Api('/api/admin/activity?limit=50');
+            const root=document.getElementById('bppPrivateActivity');
+            if(!root)return;
+            root.textContent='';
+            for(const event of (result.events||[])){
+              const line=document.createElement('p');
+              line.style.cssText='padding:9px 0;border-bottom:1px solid #ddd;white-space:pre-wrap';
+              line.textContent=[event.at||'',event.actor||'Unknown',event.action||'Change',
+                event.revision==null?'':'Revision '+event.revision,
+                JSON.stringify(event.details||{})].filter(Boolean).join(' | ');
+              root.appendChild(line);
+            }
+            if(!(result.events||[]).length)root.textContent='No activity recorded yet.';
+          }catch(e){const root=document.getElementById('bppPrivateActivity');if(root)root.textContent='Activity log unavailable: '+e.message;}
+        };
+        actions.prepend(b);
+      };
       // The Worker has already verified the user's PIN and established this session.
       // Do not invoke the old browser-side PIN screen: its PIN hashes are deliberately
       // omitted from /api/state responses, and a second login would not work.
