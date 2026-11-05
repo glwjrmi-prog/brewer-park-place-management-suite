@@ -12,6 +12,7 @@ def fixture():
     CREATE TABLE audit_events(id INTEGER PRIMARY KEY);
     CREATE TABLE pin_credentials(user_id TEXT PRIMARY KEY,salt TEXT,verifier TEXT,iterations INTEGER,source_pin_hash TEXT);
     CREATE TABLE pin_sessions_v2(token_hash TEXT PRIMARY KEY,user_id TEXT);
+    CREATE TABLE pin_attempts(identifier TEXT PRIMARY KEY,failures INTEGER,locked_until INTEGER);
     """)
     state={"_access":{"users":[{"id":"synthetic-admin","name":"Admin","role":"admin","active":True},
                                 {"id":"synthetic-user","name":"Member","role":"user","active":True}]},
