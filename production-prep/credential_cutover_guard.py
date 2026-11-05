@@ -14,7 +14,7 @@ import sqlite3
 def review(con):
     table_names={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     reasons=[]
-    required={"current_state","state_revisions","audit_events","pin_credentials","pin_sessions_v2"}
+    required={"current_state","state_revisions","audit_events","pin_credentials","pin_sessions_v2","pin_attempts"}
     for missing in sorted(required-table_names):
         reasons.append("missing table: "+missing)
     if "current_state" not in table_names:
