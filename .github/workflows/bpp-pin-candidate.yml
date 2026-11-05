@@ -42,6 +42,10 @@ jobs:
         run: node --test production-prep/isolated-enrollment-flow.test.mjs
       - name: Syntax check isolated enrollment test Worker
         run: node --check production-prep/WORKER_PIN_ENROLLMENT_TEST.js
+      - name: Syntax check temporary production enrollment Worker
+        run: node --check production-prep/WORKER_PIN_RELEASE_CANDIDATE.js
+      - name: Test production hostname-bound pre-enrollment against synthetic D1
+        run: node --test production-prep/production-preenrollment.integration.test.mjs
       - name: Syntax check peppered PIN experiment
         run: node --check production-prep/WORKER_PEPPER_EXPERIMENT.js
       - name: Test peppered PIN experiment using isolated D1
