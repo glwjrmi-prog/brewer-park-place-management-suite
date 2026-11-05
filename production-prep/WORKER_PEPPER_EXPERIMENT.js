@@ -736,7 +736,7 @@ async function resetUserPin(request, env, cors, principal) {
   try {body=await request.json();} catch {return json({ok:false,error:'Invalid request'},400,cors);}
   const id=String(body?.userId||'');
   const pin=String(body?.pin??'');
-  if (!id || id.length>128 || !/^\\d{6}$/.test(pin))
+  if (!id || id.length>128 || !/^\d{6}$/.test(pin))
     return json({ok:false,error:'Invalid account or PIN'},400,cors);
   const row=await currentRow(env);
   if (!row) return json({ok:false,error:'Database not initialized'},409,cors);
