@@ -983,21 +983,37 @@ async function testAccountStatus(request,env,cors){
   let payload;
   try{payload=await request.json()}catch{return json({ok:false,error:'Invalid request'},400,cors)}
   const name=normalizeName(String(payload?.name||''));
-  if(name.length<2||name.length>100)
-    return json({ok:false,error:'Enter an account name'},400,cors);
+  const userId=String(payload?.userId||'').trim();
+  if ((!name||name.length>100)&&(!userId||userId.length>128))
+    return json({ok:false,error:'Enter a valid test account name or account ID'},400,cors);
   const row=await currentRow(env);
   if(!row)return json({ok:false,error:'Test database not initialized'},409,cors);
   const profiles=JSON.parse(row.state_json)?._access?.users||[];
-  const user=profiles.find(u=>normalizeName(u.name)===name);
-  if(!user)return json({ok:true,found:false},200,cors);
+  if(!Array.isArray(profiles))
+    return json({ok:false,error:'Malformed test account list'},409,cors);
+  const user=profiles.find(u=>(userId && u.id===userId) ||
+     (name && normalizeName(u.name)===name));
+  const matchingCredential=userId
+    ?await env.DB.prepare('SELECT user_id FROM pin_credentials WHERE user_id=?').bind(userId).first()
+    :null;
+  // Admin-only synthetic account inventory; no credentials, salts, PINs, verifiers,
+  // resident data, or complete state payload ever returned.
+  const inventory=profiles.map(u=>({
+    id:String(u.id||''),name:String(u.name||''),role:String(u.role||''),
+    active:u.active!==false
+  }));
+  if(!user)return json({ok:true,found:false,revision:Number(row.revision),
+    accountIdHasCredential:!!matchingCredential,accounts:inventory},200,cors);
   const cred=await env.DB.prepare('SELECT user_id,salt,verifier,iterations,source_pin_hash FROM pin_credentials WHERE user_id=?').bind(user.id).first();
-  const identifier=await sha256Hex(name);
+  const identifier=await sha256Hex(normalizeName(user.name));
   const attempts=await env.DB.prepare('SELECT failures,locked_until FROM pin_attempts WHERE identifier=?').bind(identifier).first();
-  return json({ok:true,found:true,name:user.name,id:user.id,role:user.role,
+  return json({ok:true,found:true,revision:Number(row.revision),
+    name:user.name,id:user.id,role:user.role,
     active:user.active!==false,credentialPresent:!!cred,
     credentialFormatValid:!!cred&&/^[0-9a-f]{48}$/.test(cred.salt||'')&&/^[0-9a-f]{64}$/.test(cred.verifier||'')&&cred.iterations===PBKDF2_ITERATIONS&&cred.source_pin_hash==='',
     lockoutActive:Number(attempts?.locked_until||0)>Date.now(),
-    unsuccessfulAttempts:Number(attempts?.failures||0)
+    unsuccessfulAttempts:Number(attempts?.failures||0),
+    accounts:inventory
   },200,cors);
 }
 function testEnrollmentHtml(){
@@ -1021,6 +1037,7 @@ small{color:#6b756b}</style>
 <section><h3>Account status — administrator check</h3>
 <p>Shows whether an account exists, is active and has a valid credential record. It never reveals a PIN or verifier.</p>
 <label>Account name<input id="statusname" autocomplete="off" value=""></label>
+<label>Account ID (optional)<input id="statusid" autocomplete="off" value=""></label>
 <button id="statuscheck">Check account status</button></section>
 <section><h3>3. Reset a test PIN</h3><label>Test account ID<input id="accountid" autocomplete="off"></label>
 <label>Replacement test PIN<input id="resetpin" maxlength="6" type="password" inputmode="numeric"></label><button id="reset">Reset test PIN</button></section>
@@ -1056,7 +1073,7 @@ by('create').onclick=()=>run(async()=>{
   const r=await api('/api/admin/user-create',{name,role,pin});output('Test user created.',r);
 });
 by('statuscheck').onclick=()=>run(async()=>{
-  const r=await api('/test/account-status',{name:by('statusname').value.trim()});
+  const r=await api('/test/account-status',{name:by('statusname').value.trim(),userId:by('statusid').value.trim()});
   output('Test account diagnostics (no secrets).',r);
 });
 by('reset').onclick=()=>run(async()=>{
