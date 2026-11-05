@@ -46,6 +46,12 @@ export default {
         env.TEST_MODE==='enabled';
       if (isolated && url.pathname==='/test-enroll' && request.method==='GET')
         return new Response(testEnrollmentHtml(),{headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'}});
+      if (isolated && url.pathname==='/test/account-status' && request.method==='POST') {
+        const caller=await authenticateSession(request,env);
+        if (!caller || caller.role!=='admin')
+          return json({ok:false,error:'Test administrator login required'},403,cors);
+        return testAccountStatus(request,env,cors);
+      }
       if (isolated && url.pathname==='/test/confirm' && request.method==='POST') {
         const user=await authenticateSession(request,env);
         if(!user)return json({ok:false,error:'Valid test PIN session required'},401,cors);
@@ -973,6 +979,27 @@ function mergeAndAuthorizeAccess(current, proposed, principal, env) {
   return null;
 }
 
+async function testAccountStatus(request,env,cors){
+  let payload;
+  try{payload=await request.json()}catch{return json({ok:false,error:'Invalid request'},400,cors)}
+  const name=normalizeName(String(payload?.name||''));
+  if(name.length<2||name.length>100)
+    return json({ok:false,error:'Enter an account name'},400,cors);
+  const row=await currentRow(env);
+  if(!row)return json({ok:false,error:'Test database not initialized'},409,cors);
+  const profiles=JSON.parse(row.state_json)?._access?.users||[];
+  const user=profiles.find(u=>normalizeName(u.name)===name);
+  if(!user)return json({ok:true,found:false},200,cors);
+  const cred=await env.DB.prepare('SELECT user_id,salt,verifier,iterations,source_pin_hash FROM pin_credentials WHERE user_id=?').bind(user.id).first();
+  const identifier=await sha256Hex(name);
+  const attempts=await env.DB.prepare('SELECT failures,locked_until FROM pin_attempts WHERE identifier=?').bind(identifier).first();
+  return json({ok:true,found:true,name:user.name,id:user.id,role:user.role,
+    active:user.active!==false,credentialPresent:!!cred,
+    credentialFormatValid:!!cred&&/^[0-9a-f]{48}$/.test(cred.salt||'')&&/^[0-9a-f]{64}$/.test(cred.verifier||'')&&cred.iterations===PBKDF2_ITERATIONS&&cred.source_pin_hash==='',
+    lockoutActive:Number(attempts?.locked_until||0)>Date.now(),
+    unsuccessfulAttempts:Number(attempts?.failures||0)
+  },200,cors);
+}
 function testEnrollmentHtml(){
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BPP Isolated PIN Enrollment Test</title>
@@ -991,6 +1018,10 @@ small{color:#6b756b}</style>
 <label>Role<select id="role"><option value="user">Authorized User</option><option value="admin">Board Administrator</option></select></label>
 <label>New test PIN<input id="newpin" maxlength="6" type="password" inputmode="numeric"></label>
 <button id="create">Create test user</button></section>
+<section><h3>Account status — administrator check</h3>
+<p>Shows whether an account exists, is active and has a valid credential record. It never reveals a PIN or verifier.</p>
+<label>Account name<input id="statusname" autocomplete="off" value=""></label>
+<button id="statuscheck">Check account status</button></section>
 <section><h3>3. Reset a test PIN</h3><label>Test account ID<input id="accountid" autocomplete="off"></label>
 <label>Replacement test PIN<input id="resetpin" maxlength="6" type="password" inputmode="numeric"></label><button id="reset">Reset test PIN</button></section>
 <section><h3>4. Private Activity Log</h3><button id="activity">Check System Administrator-only access</button></section>
@@ -1023,6 +1054,10 @@ by('logout').onclick=()=>run(async()=>{try{await api('/api/auth/logout',{})}catc
 by('create').onclick=()=>run(async()=>{
   const name=by('newname').value,pin=by('newpin').value,role=by('role').value;by('newpin').value='';
   const r=await api('/api/admin/user-create',{name,role,pin});output('Test user created.',r);
+});
+by('statuscheck').onclick=()=>run(async()=>{
+  const r=await api('/test/account-status',{name:by('statusname').value.trim()});
+  output('Test account diagnostics (no secrets).',r);
 });
 by('reset').onclick=()=>run(async()=>{
   const userId=by('accountid').value,pin=by('resetpin').value;by('resetpin').value='';
