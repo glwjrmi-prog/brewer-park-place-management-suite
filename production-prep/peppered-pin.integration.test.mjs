@@ -145,6 +145,22 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  const logout=await post('/api/auth/logout',{},adminLogin.data.token);
  assert.equal(logout.res.status,200);
  assert.equal((await get('/api/state',adminLogin.data.token)).res.status,401);
+ // Simulate the credential-only data state after an offline-verified migration:
+ // no old fast hashes or salts, no source hash retained in new verifier table.
+ const currentBlob=await db.prepare('SELECT state_json FROM current_state').first();
+ const credentialOnly=JSON.parse(currentBlob.state_json);
+ for(const u of credentialOnly._access.users){delete u.pinHash;delete u.salt;delete u.passwordHash;}
+ await db.prepare('UPDATE current_state SET state_json=? WHERE singleton_id=1').bind(JSON.stringify(credentialOnly)).run();
+ await db.prepare("UPDATE pin_credentials SET source_pin_hash=''").run();
+ const fromScrub=await post('/api/auth/login',{name:'Test User',pin:'789456'});
+ assert.equal(fromScrub.res.status,200,'Existing server-side credential failed after fast hash scrubbing: '+JSON.stringify(fromScrub.data));
+ const protectedState=await get('/api/state',fromScrub.data.token);
+ assert.equal(protectedState.res.status,200);
+ assert.equal(protectedState.data.data.maintenance.length,2);
+ assert.ok(protectedState.data.data._access.users.every(u=>!('pinHash' in u)&&!('salt' in u)));
+ const adminAfterScrub=await post('/api/auth/login',{name:'Test Admin',pin:'123456'});
+ assert.equal(adminAfterScrub.res.status,200,'Admin lockout after credential-history scrub');
+ assert.equal((await get('/api/auth/me',adminAfterScrub.data.token)).data.user.role,'admin');
  // CORS must not permit the staging Pages origin.
  const disallowed=await mf.dispatchFetch('https://api.example.test/api/auth/login',{
   method:'OPTIONS',headers:{Origin:'https://bad.bpp-management-suite-staging.pages.dev'}
