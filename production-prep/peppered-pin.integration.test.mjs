@@ -102,13 +102,17 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  const adminLogin=await post('/api/auth/login',{name:'Test Admin',pin:'123456'});
  assert.equal(adminLogin.res.status,200,JSON.stringify(adminLogin.data));
  const candidate=structuredClone((await get('/api/state',adminLogin.data.token)).data.data);
- candidate.maintenance.push({id:'WO-2026-080',status:'Open',location:'Integration test'});
+ candidate.maintenance.push({id:'WO-2026-080',status:'Open',location:'Integration test',createdBy:'Forged browser identity',modifiedBy:'Forged browser identity',auditTrail:[{by:'Forged'}]});
  const saved=await post('/api/state',{baseRevision:1,data:candidate,reason:'Synthetic work order'},adminLogin.data.token);
  assert.equal(saved.res.status,200,JSON.stringify(saved.data));
  const after=await get('/api/state',adminLogin.data.token);
  assert.equal(after.data.revision,2);
  assert.equal(after.data.data.maintenance.length,2);
  assert.equal(after.data.data.groundsProjects.length,1);
+ assert.equal(after.data.data.maintenance[1].createdBy,'Test Admin','Browser spoofed audit author');
+ assert.equal(after.data.data.maintenance[1].modifiedBy,'Test Admin','Browser spoofed latest editor');
+ assert.equal(after.data.data.maintenance[1].auditTrail.length,1);
+ assert.equal(after.data.data.maintenance[1].auditTrail[0].by,'Test Admin');
  const historical=await db.prepare('SELECT count(*) AS n FROM state_revisions').first();
  assert.equal(historical.n,1);
  // Server-side session invalidation must work without a browser refresh.
