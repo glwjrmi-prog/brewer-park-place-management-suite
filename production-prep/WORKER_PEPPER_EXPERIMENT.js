@@ -340,6 +340,46 @@ async function sha256Text(text) {
   return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+function stampVerifiedRecordActors(previous,proposed,actor,at) {
+  // Browser-provided record author/audit fields are untrusted. Server session
+  // identity is authoritative for all newly created or changed record entries.
+  const updated=structuredClone(proposed);
+  const identity={maintenance:'id',projects:'id',groundsProjects:'id',vendors:'vendor',
+    violations:'caseId',inspections:'inspectionId',knowledgeBase:'id'};
+  const ignore=new Set(['createdBy','createdAt','modifiedBy','modifiedAt','auditTrail']);
+  const substantive=r=>{
+    if(!r || typeof r!=='object')return r;
+    const result={};
+    for(const [k,v] of Object.entries(r))if(!ignore.has(k))result[k]=v;
+    return result;
+  };
+  for(const [module,key] of Object.entries(identity)){
+    if(!Array.isArray(updated[module]))continue;
+    const existing=arrayOf(previous,module);
+    const old=new Map(existing.map((r,i)=>[String(r?.[key]||'#'+i),r]));
+    updated[module]=updated[module].map((record,i)=>{
+      if(!record || typeof record!=='object')return record;
+      const prior=old.get(String(record?.[key]||'#'+i));
+      const rec={...record};
+      if(prior){
+        rec.createdAt=prior.createdAt;
+        rec.createdBy=prior.createdBy;
+        rec.auditTrail=structuredClone(Array.isArray(prior.auditTrail)?prior.auditTrail:[]);
+        if(JSON.stringify(substantive(prior))!==JSON.stringify(substantive(record))){
+          rec.modifiedAt=at;rec.modifiedBy=actor;
+          rec.auditTrail.push({at,by:actor,action:'Modified'});
+        } else {
+          rec.modifiedAt=prior.modifiedAt;rec.modifiedBy=prior.modifiedBy;
+        }
+      }else{
+        rec.createdBy=actor;rec.createdAt=at;rec.modifiedBy=actor;rec.modifiedAt=at;
+        rec.auditTrail=[{at,by:actor,action:'Created'}];
+      }
+      return rec;
+    });
+  }
+  return updated;
+}
 function stampState(data, revision, actor) {
   const copy = structuredClone(data);
   copy._sync = {
@@ -464,11 +504,12 @@ async function saveState(request, env, cors, principal) {
   const actor = actorName(principal.name);
   const reason = reasonText(body?.reason);
   const newRevision = baseRevision + 1;
-  const stamped = stampState(body.data, newRevision, actor);
+  const now = new Date().toISOString();
+  const verifiedState=stampVerifiedRecordActors(currentData,body.data,actor,now);
+  const stamped = stampState(verifiedState, newRevision, actor);
   const stateJson = JSON.stringify(stamped);
   const checksum = await sha256Text(stateJson);
   const countsJson = JSON.stringify(recordCounts(stamped));
-  const now = new Date().toISOString();
 
   try {
     const result = await env.DB.batch([
