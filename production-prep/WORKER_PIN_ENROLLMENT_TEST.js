@@ -46,6 +46,14 @@ export default {
         env.TEST_MODE==='enabled';
       if (isolated && url.pathname==='/test-enroll' && request.method==='GET')
         return new Response(testEnrollmentHtml(),{headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'}});
+      if (isolated && url.pathname==='/test/confirm' && request.method==='POST') {
+        const user=await authenticateSession(request,env);
+        if(!user)return json({ok:false,error:'Valid test PIN session required'},401,cors);
+        const state=await currentRow(env);
+        await env.DB.prepare("INSERT INTO audit_events(event_type,revision,actor,created_at,details_json) VALUES('test-enrollment-confirmed',?,?,?,?)")
+          .bind(Number(state.revision),user.name,new Date().toISOString(),JSON.stringify({userId:user.id})).run();
+        return json({ok:true,confirmedTestAccount:user.id},200,cors);
+      }
       if (isolated && url.pathname==='/test/scrub' && request.method==='POST') {
         const user=await authenticateSession(request,env);
         if (!user || user.role!=='admin')
@@ -1005,7 +1013,7 @@ async function run(fn){try{await fn()}catch(e){output('Not completed: '+e.messag
 by('signin').onclick=()=>run(async()=>{
   const name=by('name').value,pin=by('pin').value;by('pin').value='';
   const r=await api('/api/auth/login',{name,pin});token=r.token;
-  sessionStorage.setItem('bppEnrollmentTestToken',token);output('Signed in with verified PIN.',{user:r.user});
+  sessionStorage.setItem('bppEnrollmentTestToken',token);await api('/test/confirm',{});output('Signed in and test credential confirmed.',{user:r.user});
 });
 by('who').onclick=()=>run(async()=>{const r=await api('/api/auth/me');output('Verified session.',r)});
 by('logout').onclick=()=>run(async()=>{try{await api('/api/auth/logout',{})}catch{}
@@ -1037,6 +1045,11 @@ async function scrubSyntheticCredentials(env,cors) {
     return json({ok:false,error:'Active test administrator required'},409,cors);
   const creds=(await env.DB.prepare('SELECT user_id,source_pin_hash FROM pin_credentials').all()).results||[];
   const keys=new Map(creds.map(c=>[c.user_id,c.source_pin_hash]));
+  const enrolledRows=(await env.DB.prepare("SELECT details_json FROM audit_events WHERE event_type='test-enrollment-confirmed'").all()).results||[];
+  const confirmed=new Set(enrolledRows.map(x=>{try{return JSON.parse(x.details_json).userId}catch{return''}}));
+  if(users.some(u=>u.active!==false&&!confirmed.has(u.id)))
+    return json({ok:false,error:'Every active test user must sign in on /test-enroll before cleanup'},409,cors);
+
   if(users.some(u=>u.active!==false && !keys.has(u.id)))
     return json({ok:false,error:'Sign in once as every active test account before scrubbing'},409,cors);
   // Historical data is rewritten only in the isolated test Worker.
