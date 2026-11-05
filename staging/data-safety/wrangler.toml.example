@@ -1,0 +1,16 @@
+# Example only. Do not commit real database IDs or secrets.
+name = "bpp-management-suite-staging"
+main = "worker.js"
+compatibility_date = "2026-09-20"
+
+[vars]
+ALLOWED_ORIGINS = "https://glwjrmi-prog.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bpp-management-suite-staging"
+database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
+
+# Configure these as Worker secrets, never plain vars and never commit them:
+# ACCESS_TOKEN
+# ADMIN_TOKEN

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Brewer Park Place Management Suite — Staging</title>
+<style>
+:root{--green:#173a29;--green2:#2d6b4a;--bg:#eef3ef;--panel:#fff;--line:#d6e0da;--ink:#16241d;--muted:#66756d;--warn:#8a5b00;--danger:#a33;--blue:#315d86}
+*{box-sizing:border-box}body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--green);color:#fff;padding:16px 22px;display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}header h1{margin:0;font-size:22px}.tag{background:#fff3cd;color:#6e5200;border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px}.wrap{max-width:1280px;margin:0 auto;padding:20px}.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.pill{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;font-size:12px}.ok{color:var(--green2);border-color:#b9dbc8;background:#f3fbf6}.warn{color:var(--warn);border-color:#ead7a8;background:#fff9ea}.bad{color:var(--danger);border-color:#e8bcbc;background:#fff3f3}button{border:0;border-radius:10px;background:var(--green2);color:#fff;padding:9px 12px;font-weight:800;cursor:pointer}button.secondary{background:#fff;color:var(--green);border:1px solid var(--line)}button:disabled{opacity:.55;cursor:not-allowed}.grid{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:12px;margin-bottom:14px}.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px}.num{font-size:26px;font-weight:900}.label{font-size:12px;color:var(--muted);font-weight:800}.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px}.panel h2{font-size:17px;margin:0 0 10px}.toolbar{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}input,select,textarea{border:1px solid var(--line);border-radius:9px;padding:9px;font:inherit}input.search{min-width:280px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid var(--line);text-align:left;font-size:12px;vertical-align:top}th{background:#f7faf8;color:#45564d}.scroll{overflow:auto}.muted{color:var(--muted)}dialog{border:0;border-radius:16px;padding:0;width:min(760px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.28)}dialog::backdrop{background:rgba(0,0,0,.35)}.dlgHead{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.form{padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:12px}.form label{font-size:12px;font-weight:800;display:grid;gap:5px}.wide{grid-column:1/-1}.actions{padding:14px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}.login{position:fixed;inset:0;background:rgba(16,38,27,.78);display:grid;place-items:center;padding:20px;z-index:30}.loginCard{width:min(520px,96vw);background:#fff;border-radius:18px;padding:20px}.loginCard h2{margin-top:0}.loginCard label{display:grid;gap:6px;margin:10px 0;font-size:13px;font-weight:800}.historyMeta{white-space:nowrap}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.form{grid-template-columns:1fr}.wide{grid-column:auto}}
+</style>
+</head>
+<body>
+<header><div><h1>Brewer Park Place Management Suite</h1><div style="opacity:.82;font-size:12px">Authoritative Cloud Staging</div></div><span class="tag">STAGING ONLY — NOT PRODUCTION</span></header>
+<div class="wrap">
+  <div class="bar">
+    <span id="cloudStatus" class="pill warn">Not connected</span>
+    <span id="revisionStatus" class="pill">Revision —</span>
+    <span id="lastSaved" class="pill">Last saved —</span>
+    <span id="updatedBy" class="pill">Updated by —</span>
+    <button id="refreshBtn" class="secondary">Refresh now</button>
+    <button id="historyBtn" class="secondary">Revision history</button>
+    <button id="signOutBtn" class="secondary">Sign out</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div id="woCount" class="num">—</div><div class="label">Work Orders</div></div>
+    <div class="card"><div id="violationCount" class="num">—</div><div class="label">Violations</div></div>
+    <div class="card"><div id="projectCount" class="num">—</div><div class="label">Projects</div></div>
+    <div class="card"><div id="inspectionCount" class="num">—</div><div class="label">Inspections</div></div>
+    <div class="card"><div id="vendorCount" class="num">—</div><div class="label">Vendors</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="toolbar"><div><h2>Work Orders</h2><div class="muted">Cloud is authoritative. Saves are revision-checked before the server accepts them.</div></div><div><input id="search" class="search" placeholder="Search ID, location, issue, vendor"><button id="newWorkOrderBtn">+ Work Order</button></div></div>
+    <div class="scroll"><table><thead><tr><th>ID</th><th>Opened</th><th>Location</th><th>Issue</th><th>Status</th><th>Vendor</th><th>Actual</th></tr></thead><tbody id="woBody"></tbody></table></div>
+  </div>
+
+  <div id="historyPanel" class="panel" hidden>
+    <div class="toolbar"><div><h2>Revision History</h2><div class="muted">Prior cloud states retained by the server.</div></div><button id="closeHistoryBtn" class="secondary">Close</button></div>
+    <div class="scroll"><table><thead><tr><th>Revision</th><th>Saved</th><th>Saved by</th><th>Reason</th><th>Work Orders</th><th>Violations</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+  </div>
+</div>
+
+<div id="login" class="login">
+  <div class="loginCard">
+    <h2>Staging sign-in</h2>
+    <p class="muted">This staging page connects only to the new protected D1 database. Your key stays in this browser tab and is not stored in the repository.</p>
+    <label>Your name<input id="actorInput" value="Gordy Wheeler"></label>
+    <label>Staging key<input id="keyInput" type="password" autocomplete="off"></label>
+    <button id="connectBtn">Connect to staging</button>
+    <div id="loginMsg" class="muted" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<dialog id="woDialog">
+  <div class="dlgHead"><strong id="dlgTitle">Work Order</strong><button id="dlgClose" class="secondary">Close</button></div>
+  <div class="form">
+    <label>ID<input id="fId" readonly></label>
+    <label>Status<select id="fStatus"><option>Open</option><option>Pending</option><option>In Progress</option><option>Waiting on Vendor</option><option>Waiting on Board</option><option>Closed</option><option>Cancelled</option></select></label>
+    <label>Date opened<input id="fOpened" type="date"></label>
+    <label>Date closed<input id="fClosed" type="date"></label>
+    <label>Location<input id="fLocation"></label>
+    <label>Priority<select id="fPriority"><option>Routine</option><option>High</option><option>Emergency</option></select></label>
+    <label>Vendor<input id="fVendor"></label>
+    <label>Actual cost<input id="fActual" type="number" step="0.01"></label>
+    <label class="wide">Issue<textarea id="fIssue"></textarea></label>
+    <label class="wide">Notes<textarea id="fNotes"></textarea></label>
+  </div>
+  <div class="actions"><button id="saveWoBtn">Save to protected cloud</button></div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
