@@ -196,6 +196,37 @@ function arrayOf(data, key) {
   return Array.isArray(data?.[key]) ? data[key] : [];
 }
 
+function activityRecordChanges(before, after) {
+  // Store field names and safe operational values; no complete resident notes,
+  // contact details, user PINs or document URLs in the activity event.
+  const ids={maintenance:'id',projects:'id',groundsProjects:'id',
+    vendors:'vendor',violations:'caseId',inspections:'inspectionId',knowledgeBase:'id'};
+  const safeValues=new Set(['status','priority','dateClosed','dateOpened','actual','estimate']);
+  const changes=[];
+  for(const [module,idKey] of Object.entries(ids)){
+    const oldRows=arrayOf(before,module),newRows=arrayOf(after,module);
+    const old=new Map(oldRows.map((r,i)=>[String(r?.[idKey]||'#'+i),r]));
+    const next=new Map(newRows.map((r,i)=>[String(r?.[idKey]||'#'+i),r]));
+    for(const [id,record] of next){
+      const previous=old.get(id);
+      if(!previous){changes.push({module,id,action:'created'});continue}
+      const fields=[];
+      for(const key of new Set([...Object.keys(previous),...Object.keys(record)])){
+        if(key==='auditTrail'||key==='modifiedBy'||key==='modifiedAt')continue;
+        if(JSON.stringify(previous[key])===JSON.stringify(record[key]))continue;
+        const field={field:key};
+        if(safeValues.has(key)){
+          field.before=String(previous[key]??'').slice(0,80);
+          field.after=String(record[key]??'').slice(0,80);
+        }
+        fields.push(field);
+      }
+      if(fields.length)changes.push({module,id,action:'modified',fields:fields.slice(0,30)});
+    }
+    for(const id of old.keys())if(!next.has(id))changes.push({module,id,action:'deleted'});
+  }
+  return changes.slice(0,150);
+}
 function recordCounts(data) {
   const out = {};
   for (const key of PROTECTED_COLLECTIONS) out[key] = arrayOf(data, key).length;
@@ -453,7 +484,7 @@ async function saveState(request, env, cors, principal) {
       ).bind(newRevision, stateJson, checksum, countsJson, now, actor, reason, baseRevision),
       env.DB.prepare(
         "INSERT INTO audit_events(event_type,revision,actor,created_at,details_json) VALUES('save',?,?,?,?)"
-      ).bind(newRevision, actor, now, JSON.stringify({ reason, counts: recordCounts(stamped), destructiveOverride: allowDestructive }))
+      ).bind(newRevision, actor, now, JSON.stringify({ reason, counts: recordCounts(stamped), changes: activityRecordChanges(currentData,stamped), destructiveOverride: allowDestructive }))
     ]);
 
     const updateMeta = result?.[1]?.meta;
@@ -861,6 +892,9 @@ function mergeAndAuthorizeAccess(current, proposed, principal, env) {
     return 'Existing user accounts must not be removed';
   for (const u of after) {
     const old = saved.get(u.id);
+    if (!old && profilesAreCredentialOnly)
+      return 'Create new accounts through protected enrollment';
+
     if (old) {
       if (!u.pinHash) u.pinHash=old.pinHash;
       if (!u.salt) u.salt=old.salt;
