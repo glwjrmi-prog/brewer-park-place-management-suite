@@ -27,3 +27,11 @@ test('full suite gets verified account entitlement before showing private log',(
    /accessHashPin\(|pinHash\s*=|\.salt\s*=/);
  }
 });
+
+test('production release candidate uses the secure bridge, not the old shared-token client',()=>{
+ const launcher=readFileSync('production-prep/PRODUCTION_PIN_LAUNCHER_CANDIDATE.html','utf8');
+ assert.match(launcher,/\.\/production-prep\/PIN_BRIDGE_CANDIDATE\.js/);
+ assert.doesNotMatch(launcher,/fetch\('\.\/d1-authoritative-bridge\.js'/);
+ assert.match(launcher,/PRODUCTION RELEASE CANDIDATE/);
+ assert.match(prod,/https:\/\/bpp-management-suite-production-api\.glwjrmi\.workers\.dev/);
+});
