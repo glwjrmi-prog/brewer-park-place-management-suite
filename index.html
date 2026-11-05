@@ -1,3 +1,4 @@
+<!-- PRODUCTION RELEASE CANDIDATE. DO NOT REPLACE LIVE index.html UNTIL CUTOVER GATES PASS. -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,7 +13,7 @@
   </style>
 </head>
 <body>
-  <div class="loading"><div class="card"><h1>Brewer Park Place Management Suite</h1><p>Loading the protected cloud Management Suite…</p><div id="msg"></div></div></div>
+  <div class="loading"><div class="card"><h1>Brewer Park Place Management Suite</h1><p>Loading secure PIN-protected Management Suite…</p><div id="msg"></div></div></div>
   <script>
   (async()=>{
     const msg=document.getElementById('msg');
@@ -20,7 +21,7 @@
     try{
       const [htmlRes,bridgeRes,toolsRes,driveRes,auditRes,uiRes,groundsRes]=await Promise.all([
         fetch(source,{cache:'no-store'}),
-        fetch('./d1-authoritative-bridge.js',{cache:'no-store'}),
+        fetch('./production-prep/PIN_BRIDGE_CANDIDATE.js',{cache:'no-store'}),
         fetch('./d1-tools-ui-patch.js',{cache:'no-store'}),
         fetch('./d1-drive-picker-patch.js',{cache:'no-store'}),
         fetch('./d1-audit-provenance-patch.js',{cache:'no-store'}),
