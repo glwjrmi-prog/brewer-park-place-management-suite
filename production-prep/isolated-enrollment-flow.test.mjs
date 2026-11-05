@@ -69,7 +69,7 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
   recoveryMetadata:{verified:'synthetic'}
  };
  await db.prepare('INSERT INTO current_state(singleton_id,revision,state_json,checksum,counts_json,updated_at,updated_by,reason) VALUES(1,1,?,?,?,?,?,?)')
-  .bind(JSON.stringify(data),'fixture-checksum','{}','2026-11-04','fixture','fixture').run();
+  .bind(JSON.stringify(data),await hash(JSON.stringify(data)),'{}','2026-11-04','fixture','fixture').run();
  // A leaked legacy ACCESS_TOKEN must not grant admin access by default.
  const legacyRead=await get('/api/state','synthetic-old-shared-key');
  assert.equal(legacyRead.res.status,401,'Legacy shared token unexpectedly bypassed PIN authorization');
