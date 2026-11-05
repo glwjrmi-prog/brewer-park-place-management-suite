@@ -385,7 +385,9 @@
         sessionStorage.removeItem(SESSION_KEY);
         sessionStorage.removeItem(USER_KEY);
         currentUser=await showPinLogin();
-        if(!await verifySession(sessionStorage.getItem(SESSION_KEY)||''))throw new Error('Session verification failed');
+        const confirmedUser=await verifySession(sessionStorage.getItem(SESSION_KEY)||'');
+        if(!confirmedUser)throw new Error('Session verification failed');
+        currentUser=confirmedUser;
       }
       sessionStorage.setItem(USER_KEY,currentUser.id);
       const remote=await v9GetState();
