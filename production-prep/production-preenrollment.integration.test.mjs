@@ -80,6 +80,9 @@ test('explicit temporary legacy compatibility keeps the existing production webs
  const db=await mf.getD1Database('DB');
  await db.exec('CREATE TABLE current_state(singleton_id INTEGER PRIMARY KEY,revision INTEGER,state_json TEXT,checksum TEXT,counts_json TEXT,updated_at TEXT,updated_by TEXT,reason TEXT);');
  await db.exec('CREATE TABLE pin_sessions_v2(token_hash TEXT PRIMARY KEY,user_id TEXT,expires_at INTEGER,created_at INTEGER,account_fingerprint TEXT);');
+ await db.exec('CREATE TABLE state_revisions(revision INTEGER PRIMARY KEY,state_json TEXT,checksum TEXT,counts_json TEXT,saved_at TEXT,saved_by TEXT,reason TEXT);');
+ await db.exec('CREATE TABLE audit_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT,revision INTEGER,actor TEXT,created_at TEXT,details_json TEXT);');
+
  const state={_access:{users:[{id:'a',name:'Synthetic Owner',active:true,role:'admin',pinHash:'f'.repeat(64),salt:'1'.repeat(32)}]},
     maintenance:[],projects:[],vendors:[],violations:[],inspections:[],knowledgeBase:[],groundsProjects:[]};
  const serialized=JSON.stringify(state);
@@ -88,6 +91,17 @@ test('explicit temporary legacy compatibility keeps the existing production webs
  assert.equal(res.status,200,'Old live client would fail during the transitional Worker rollout');
  const body=await res.json();
  assert.equal(body.data._access.users[0].pinHash,'f'.repeat(64),'Legacy client requires existing profile during brief transition');
+ const stateForSave=structuredClone(body.data);
+ stateForSave.maintenance.push({id:'WO-SYNTHETIC',status:'Open'});
+ const write=await mf.dispatchFetch(host+'/api/state',{
+   method:'POST',headers:{Origin:origin,Authorization:'Bearer legacy-web-key','Content-Type':'application/json'},
+   body:JSON.stringify({baseRevision:187,data:stateForSave,reason:'Synthetic legacy-compatible work order'})});
+ assert.equal(write.status,200,'Existing BPP frontend could not save during temporary compatibility: '+JSON.stringify(await write.json().catch(()=>({}))));
+ const afterWrite=await db.prepare('SELECT revision,state_json FROM current_state').first();
+ assert.equal(afterWrite.revision,188,'Existing live-style frontend did not increment revision');
+ assert.equal(JSON.parse(afterWrite.state_json).maintenance[0].id,'WO-SYNTHETIC');
+ assert.equal(JSON.parse(afterWrite.state_json)._access.users[0].pinHash,'f'.repeat(64));
+
  const shouldNotModify=await db.prepare('SELECT revision FROM current_state').first();
- assert.equal(shouldNotModify.revision,187);
+ assert.equal(shouldNotModify.revision,188);
 });
