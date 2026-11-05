@@ -778,8 +778,10 @@ async function loginWithPin(request, env, cors) {
         valid = timingSafeEqualText(derived, credential.verifier);
       }
     }
-    if (!valid && legacyPresent && env.CREDENTIALS_ONLY !== 'enabled' &&
-        (!credential || !timingSafeEqualText(String(credential.source_pin_hash), expected))) {
+    // Until the verified cleanup, a correct existing legacy PIN can recover
+    // credentials created by the earlier (unpeppered) synthetic test Worker.
+    // This path is disabled entirely once credential-only mode is enabled.
+    if (!valid && legacyPresent && env.CREDENTIALS_ONLY !== 'enabled') {
       const actualLegacy = await sha256Hex(legacySalt + '|' + pin);
       valid = timingSafeEqualText(actualLegacy, expected);
       if (valid) {
