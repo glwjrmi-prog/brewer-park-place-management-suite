@@ -169,6 +169,9 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  assert.equal(noAudit.res.status,403,'An ordinary user could view private activity');
  const adminActivity=await get('/api/admin/activity',adminAfterScrub.data.token);
  assert.equal(adminActivity.res.status,200,'Dedicated system administrator could not view activity');
+ const workOrderEvent=(adminActivity.data.events||[]).find(e=>(e.details?.changes||[]).some(c=>c.id==='WO-2026-080'));
+ assert.ok(workOrderEvent,'Protected audit log omitted new work order');
+ assert.equal(workOrderEvent.actor,'Test Admin','Audit log did not use verified server actor');
  const created=await post('/api/admin/user-create',{name:'Third User',role:'user',pin:'246810'},adminAfterScrub.data.token);
  assert.equal(created.res.status,201,JSON.stringify(created.data));
  assert.equal(created.data.user.role,'user');
@@ -180,6 +183,17 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  assert.equal(afterCreation.data.data._access.users.length,3);
  assert.equal(afterCreation.data.data._access.users[2].pinHash,undefined);
  assert.equal((await get('/api/admin/activity',thirdLogin.data.token)).res.status,403);
+ const additionalAdmin=await post('/api/admin/user-create',{name:'Board Admin',role:'admin',pin:'135792'},adminAfterScrub.data.token);
+ assert.equal(additionalAdmin.res.status,201,JSON.stringify(additionalAdmin.data));
+ const boardLogin=await post('/api/auth/login',{name:'Board Admin',pin:'135792'});
+ assert.equal(boardLogin.res.status,200);
+ assert.equal((await get('/api/admin/activity',boardLogin.data.token)).res.status,403,
+              'Board administrator unexpectedly viewed System Administrator private log');
+ const boardState=(await get('/api/state',boardLogin.data.token)).data;
+ const forged=structuredClone(boardState.data);
+ forged._access.users.push({id:'forged',name:'Forged User',role:'admin',active:true});
+ const blockedEnrollment=await post('/api/state',{baseRevision:6,data:forged},boardLogin.data.token);
+ assert.equal(blockedEnrollment.res.status,403,'Admin state save bypassed protected account enrollment');
  // PIN reset is a server-only admin action after credential-only cutover.
  const ordinaryReset=await post('/api/admin/pin-reset',{userId:'admin',pin:'831624'},fromScrub.data.token);
  assert.equal(ordinaryReset.res.status,403,'Ordinary account could reset administrator PIN');
@@ -195,9 +209,9 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  const weakHashInjection=structuredClone(stateAfterRotate.data.data);
  weakHashInjection._access.users.find(u=>u.id==='viewer').pinHash='f'.repeat(64);
  weakHashInjection._access.users.find(u=>u.id==='viewer').salt='a'.repeat(32);
- const injection=await post('/api/state',{baseRevision:5,data:weakHashInjection},rotated.data.token);
+ const injection=await post('/api/state',{baseRevision:6,data:weakHashInjection},rotated.data.token);
  assert.equal(injection.res.status,403,'Fast credential hashes reintroduced after scrub');
- assert.equal((await get('/api/state',rotated.data.token)).data.revision,5);
+ assert.equal((await get('/api/state',rotated.data.token)).data.revision,6);
  // CORS must not permit the staging Pages origin.
  const disallowed=await mf.dispatchFetch('https://api.example.test/api/auth/login',{
   method:'OPTIONS',headers:{Origin:'https://bad.bpp-management-suite-staging.pages.dev'}
