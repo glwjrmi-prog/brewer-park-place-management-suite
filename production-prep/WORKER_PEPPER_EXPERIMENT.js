@@ -51,7 +51,7 @@ export default {
       const principal = legacy ? { id: "legacy-admin", name: "Legacy Administrator", role: "admin", legacy: true } : await authenticateSession(request, env);
       if (!principal) return json({ ok: false, error: "Unauthorized" }, 401, cors);
       if (url.pathname === "/api/auth/me" && request.method === "GET") {
-        return json({ ok: true, user: publicUser(principal) }, 200, cors);
+        return json({ ok: true, user: {...publicUser(principal),canViewActivity:!!env.SYSTEM_ADMIN_USER_ID && principal.id===env.SYSTEM_ADMIN_USER_ID} }, 200, cors);
       }
       if (url.pathname === "/api/auth/logout" && request.method === "POST") {
         if (!legacy) await revokeSession(request, env);
