@@ -1019,7 +1019,7 @@ document.getElementById('login').addEventListener('submit',async event=>{
       const verify=await fetch('/api/auth/me',{headers:{Authorization:'Bearer '+data.token},cache:'no-store'});
       const me=await verify.json();
       if(!verify.ok||!me.ok||!me.user?.id)throw Error('Verified session unavailable');
-      if(me.user.name!==name)throw Error('Account name mismatch; contact system administrator');
+      if(me.user.name.trim().toLowerCase()!==name.toLowerCase())throw Error('Account name mismatch; contact system administrator');
       output.textContent='ENROLLED — '+me.user.name+'\\nAccount role: '+me.user.role+'\\nYour existing PIN has been accepted for the updated login.';
     }finally{
       await fetch('/api/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+data.token},cache:'no-store'}).catch(()=>{});
