@@ -19,6 +19,10 @@ test('full suite gets verified account entitlement before showing private log',(
   assert.match(code,/\/api\/admin\/activity\?limit=50/);
   assert.match(code,/\/api\/admin\/user-create/);
   assert.match(code,/\/api\/admin\/pin-reset/);
+  assert.match(code,/\['Date','User','Action','Record','Changes'\]/);
+  assert.match(code,/toLocaleString\('en-US'/);
+  assert.match(code,/cell\.textContent=String\(value\)/);
+  assert.doesNotMatch(code.slice(code.indexOf('const originalShowAccount='),code.indexOf('// The Worker has already verified')), /JSON\.stringify\(event\.details\|\|\{\}\)/, 'Private log should not expose raw JSON in its UI');
   assert.doesNotMatch(code.slice(code.indexOf('accessShowUserForm=function'),code.indexOf('const originalShowAccount')),
    /accessHashPin\(|pinHash\s*=|\.salt\s*=/);
  }
