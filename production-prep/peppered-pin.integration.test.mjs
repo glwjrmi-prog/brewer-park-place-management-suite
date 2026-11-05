@@ -161,6 +161,24 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  const adminAfterScrub=await post('/api/auth/login',{name:'Test Admin',pin:'123456'});
  assert.equal(adminAfterScrub.res.status,200,'Admin lockout after credential-history scrub');
  assert.equal((await get('/api/auth/me',adminAfterScrub.data.token)).data.user.role,'admin');
+ // PIN reset is a server-only admin action after credential-only cutover.
+ const ordinaryReset=await post('/api/admin/pin-reset',{userId:'admin',pin:'831624'},fromScrub.data.token);
+ assert.equal(ordinaryReset.res.status,403,'Ordinary account could reset administrator PIN');
+ const reset=await post('/api/admin/pin-reset',{userId:'viewer',pin:'831624'},adminAfterScrub.data.token);
+ assert.equal(reset.res.status,200,JSON.stringify(reset.data));
+ assert.equal((await get('/api/auth/me',fromScrub.data.token)).res.status,401,
+              'PIN reset failed to invalidate active user session');
+ const superseded=await post('/api/auth/login',{name:'Test User',pin:'789456'});
+ assert.notEqual(superseded.res.status,200,'Old PIN worked after credential-only reset');
+ const rotated=await post('/api/auth/login',{name:'Test User',pin:'831624'});
+ assert.equal(rotated.res.status,200,JSON.stringify(rotated.data));
+ const stateAfterRotate=await get('/api/state',rotated.data.token);
+ const weakHashInjection=structuredClone(stateAfterRotate.data.data);
+ weakHashInjection._access.users.find(u=>u.id==='viewer').pinHash='f'.repeat(64);
+ weakHashInjection._access.users.find(u=>u.id==='viewer').salt='a'.repeat(32);
+ const injection=await post('/api/state',{baseRevision:4,data:weakHashInjection},rotated.data.token);
+ assert.equal(injection.res.status,403,'Fast credential hashes reintroduced after scrub');
+ assert.equal((await get('/api/state',rotated.data.token)).data.revision,4);
  // CORS must not permit the staging Pages origin.
  const disallowed=await mf.dispatchFetch('https://api.example.test/api/auth/login',{
   method:'OPTIONS',headers:{Origin:'https://bad.bpp-management-suite-staging.pages.dev'}
