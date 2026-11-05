@@ -28,6 +28,8 @@ jobs:
         run: node --test production-prep/auth-candidate.test.mjs
       - name: Validate current production launcher integration contract
         run: node --test production-prep/launcher-contract.test.mjs
+      - name: Test fail-closed PIN production readiness gate
+        run: python production-prep/credential_cutover_guard.test.py
       - name: Test in-memory credential migration rehearsal
         run: python production-prep/credential_migration_rehearsal.test.py
       - name: Test read-only credential-history audit on synthetic SQL export
