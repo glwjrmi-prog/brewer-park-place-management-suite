@@ -58,6 +58,13 @@ export default {
         return json({ ok: true }, 200, cors);
       }
 
+      if (url.pathname === "/api/admin/pin-reset" && request.method === "POST") {
+        if (principal.legacy || principal.role !== 'admin') {
+          return json({ok:false,error:'Administrator PIN session required'},403,cors);
+        }
+        return resetUserPin(request,env,cors,principal);
+      }
+
       if (url.pathname === "/api/state" && request.method === "GET") {
         return getState(env, cors, principal);
       }
@@ -720,10 +727,53 @@ async function loginWithPin(request, env, cors) {
     .bind(await sha256Hex(token),user.id,now+AUTH_SESSION_SECONDS*1000,now,await accountFingerprint(user)).run();
   return json({ok:true,token,user:publicUser(user),expiresAt:now+AUTH_SESSION_SECONDS*1000},200,cors);
 }
+async function resetUserPin(request, env, cors, principal) {
+  // This endpoint is intentionally unavailable before legacy credentials have
+  // been removed from authoritative state. No PIN is sent back to the browser.
+  if (Number(request.headers.get('content-length')||0)>4096)
+    return json({ok:false,error:'Request too large'},413,cors);
+  let body;
+  try {body=await request.json();} catch {return json({ok:false,error:'Invalid request'},400,cors);}
+  const id=String(body?.userId||'');
+  const pin=String(body?.pin??'');
+  if (!id || id.length>128 || !/^\\d{6}$/.test(pin))
+    return json({ok:false,error:'Invalid account or PIN'},400,cors);
+  const row=await currentRow(env);
+  if (!row) return json({ok:false,error:'Database not initialized'},409,cors);
+  const state=JSON.parse(row.state_json);
+  const users=state?._access?.users || [];
+  if (!users.length || users.some(u=>u.pinHash || u.salt || u.passwordHash))
+    return json({ok:false,error:'Credential-only migration required'},409,cors);
+  const target=users.find(u=>u.id===id);
+  if (!target) return json({ok:false,error:'Account not found'},404,cors);
+  const salt=randomHex(24);
+  const verifier=await pbkdf2Pin(pin,salt,PBKDF2_ITERATIONS,env,id);
+  const at=Date.now();
+  // Credential update and session revocation are one D1 transaction.
+  // We intentionally do not alter current_state or historical revisions.
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO pin_credentials(user_id,salt,verifier,iterations,source_pin_hash,updated_at)
+                    VALUES(?,?,?,?,'',?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                      salt=excluded.salt,verifier=excluded.verifier,
+                      iterations=excluded.iterations,source_pin_hash='',
+                      updated_at=excluded.updated_at`)
+      .bind(id,salt,verifier,PBKDF2_ITERATIONS,at),
+    env.DB.prepare('DELETE FROM pin_sessions_v2 WHERE user_id=?').bind(id),
+    env.DB.prepare(`INSERT INTO audit_events(event_type,revision,actor,created_at,details_json)
+                    VALUES('pin-reset',?,?,?,?)`)
+      .bind(Number(row.revision),actorName(principal.name),new Date(at).toISOString(),
+            JSON.stringify({accountId:id,credentialOnly:true}))
+  ]);
+  return json({ok:true,accountId:id,sessionRevoked:true},200,cors);
+}
 function mergeAndAuthorizeAccess(current, proposed, principal, env) {
   // Once credential-only storage is enabled, no browser request may supply
   // legacy fast PIN verifier properties (including new users).
-  if (env.CREDENTIALS_ONLY === 'enabled' &&
+  const existingProfiles = current?._access?.users || [];
+  const profilesAreCredentialOnly = existingProfiles.length > 0 &&
+    existingProfiles.every(u => !u.pinHash && !u.salt && !u.passwordHash);
+  if ((env.CREDENTIALS_ONLY === 'enabled' || profilesAreCredentialOnly) &&
       (proposed?._access?.users || []).some(u =>
         Object.hasOwn(u,'pinHash') || Object.hasOwn(u,'salt') || Object.hasOwn(u,'passwordHash')))
     return 'Credential fields must be managed by the server';
