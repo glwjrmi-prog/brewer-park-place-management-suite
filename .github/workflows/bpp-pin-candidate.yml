@@ -18,6 +18,8 @@ jobs:
         run: npm install --no-save --no-package-lock miniflare@3
       - name: Syntax check candidate
         run: node --check production-prep/WORKER_AUTH_CANDIDATE.js
+      - name: Assert secure enrollment UI and server actor contracts
+        run: node --test production-prep/enrollment-ui.contract.test.mjs
       - name: Syntax check production client bridge
         run: node --check production-prep/PIN_BRIDGE_CANDIDATE.js
       - name: Syntax check isolated full-suite test Worker and bridge
