@@ -37,7 +37,7 @@ test('temporary production enrollment is host-bound and opt-in, migrates both li
  assert.equal(page.status,200);
  const html=await page.text();
  assert.match(html,/Brewer Park Place PIN Enrollment/);
- assert.match(html,/value=''/);
+ assert.match(html,/id="name" autocomplete="off"/);
  assert.doesNotMatch(html,/value="System Owner"|value="Board User"/);
  assert.doesNotMatch(html,/PIN_PEPPER|ACCESS_TOKEN/);
  const external=await mf.dispatchFetch('https://unrelated.example.test/pin-enrollment');
