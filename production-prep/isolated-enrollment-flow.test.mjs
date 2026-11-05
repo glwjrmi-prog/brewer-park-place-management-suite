@@ -124,6 +124,18 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  assert.equal(found.data.credentialFormatValid,true);
  assert.equal(found.data.lockoutActive,false);
  assert.equal(found.data.verifier,undefined);
+ const idLookup=await post('/test/account-status',{userId:added.data.user.id},freshAdmin.data.token);
+ assert.equal(idLookup.res.status,200);
+ assert.equal(idLookup.data.id,added.data.user.id);
+ assert.equal(idLookup.data.name,'Enrollment Test Member');
+ assert.equal(idLookup.data.accounts.length,3);
+ assert.ok(idLookup.data.accounts.every(x=>x.pin===undefined&&x.verifier===undefined&&x.salt===undefined));
+ const wrongName=await post('/test/account-status',{name:'not a real test member',userId:'not-in-state'},freshAdmin.data.token);
+ assert.equal(wrongName.res.status,200);
+ assert.equal(wrongName.data.found,false);
+ assert.equal(wrongName.data.accountIdHasCredential,false);
+ assert.ok(wrongName.data.accounts.some(x=>x.id===added.data.user.id));
+
  assert.equal(found.data.pin,undefined);
  assert.equal((await post('/api/auth/login',{name:'Enrollment Test Member',pin:'246810'})).res.status,200);
  const reset=await post('/api/admin/pin-reset',{userId:added.data.user.id,pin:'831624'},freshAdmin.data.token);
