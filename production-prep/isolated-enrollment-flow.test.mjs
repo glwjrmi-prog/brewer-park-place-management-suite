@@ -82,7 +82,11 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  assert.equal(admin.res.status,200,JSON.stringify(admin.data));
  const enrollPage=await mf.dispatchFetch('https://bpp-pin-integration-test-api.glwjrmi.workers.dev/test-enroll',{method:'GET'});
  assert.equal(enrollPage.status,200);
- assert.match(await enrollPage.text(),/PIN Enrollment/);
+ const enrollmentHtml=await enrollPage.text();
+ assert.match(enrollmentHtml,/PIN Enrollment/);
+ assert.doesNotMatch(enrollmentHtml,/placeholder="BPP Test Admin"|placeholder="Enrollment Test Member"/,
+                     'Name fields must not imply prefilled account names');
+ assert.match(enrollmentHtml,/id="loginresult"/,'Login outcome must appear next to the sign-in control');
  // The historical credential cleanup must refuse a partial rollout.
  const early=await post('/test/scrub',{},admin.data.token);
  assert.equal(early.res.status,409);
