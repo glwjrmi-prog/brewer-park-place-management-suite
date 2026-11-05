@@ -30,6 +30,7 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
     ACCESS_TOKEN:'synthetic-old-shared-key',
     ADMIN_TOKEN:'synthetic-admin-token',
     PIN_PEPPER:'synthetic-test-pepper-not-real-change-before-use-1234567890',
+    SYSTEM_ADMIN_USER_ID:'admin',
     ALLOWED_ORIGINS:origin
   },
  });
@@ -161,6 +162,24 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  const adminAfterScrub=await post('/api/auth/login',{name:'Test Admin',pin:'123456'});
  assert.equal(adminAfterScrub.res.status,200,'Admin lockout after credential-history scrub');
  assert.equal((await get('/api/auth/me',adminAfterScrub.data.token)).data.user.role,'admin');
+ // Server-backed account enrollment never places a PIN hash in /api/state.
+ const ordinaryCreate=await post('/api/admin/user-create',{name:'Third User',role:'user',pin:'246810'},fromScrub.data.token);
+ assert.equal(ordinaryCreate.res.status,403);
+ const noAudit=await get('/api/admin/activity',fromScrub.data.token);
+ assert.equal(noAudit.res.status,403,'An ordinary user could view private activity');
+ const adminActivity=await get('/api/admin/activity',adminAfterScrub.data.token);
+ assert.equal(adminActivity.res.status,200,'Dedicated system administrator could not view activity');
+ const created=await post('/api/admin/user-create',{name:'Third User',role:'user',pin:'246810'},adminAfterScrub.data.token);
+ assert.equal(created.res.status,201,JSON.stringify(created.data));
+ assert.equal(created.data.user.role,'user');
+ const thirdLogin=await post('/api/auth/login',{name:'Third User',pin:'246810'});
+ assert.equal(thirdLogin.res.status,200,'Newly enrolled account cannot log in');
+ const afterCreation=await get('/api/state',thirdLogin.data.token);
+ assert.equal(afterCreation.data.revision,5);
+ assert.equal(afterCreation.data.data.maintenance.length,2);
+ assert.equal(afterCreation.data.data._access.users.length,3);
+ assert.equal(afterCreation.data.data._access.users[2].pinHash,undefined);
+ assert.equal((await get('/api/admin/activity',thirdLogin.data.token)).res.status,403);
  // PIN reset is a server-only admin action after credential-only cutover.
  const ordinaryReset=await post('/api/admin/pin-reset',{userId:'admin',pin:'831624'},fromScrub.data.token);
  assert.equal(ordinaryReset.res.status,403,'Ordinary account could reset administrator PIN');
@@ -176,9 +195,9 @@ test('isolated real Worker runtime, D1 auth migration, state and integrity',asyn
  const weakHashInjection=structuredClone(stateAfterRotate.data.data);
  weakHashInjection._access.users.find(u=>u.id==='viewer').pinHash='f'.repeat(64);
  weakHashInjection._access.users.find(u=>u.id==='viewer').salt='a'.repeat(32);
- const injection=await post('/api/state',{baseRevision:4,data:weakHashInjection},rotated.data.token);
+ const injection=await post('/api/state',{baseRevision:5,data:weakHashInjection},rotated.data.token);
  assert.equal(injection.res.status,403,'Fast credential hashes reintroduced after scrub');
- assert.equal((await get('/api/state',rotated.data.token)).data.revision,4);
+ assert.equal((await get('/api/state',rotated.data.token)).data.revision,5);
  // CORS must not permit the staging Pages origin.
  const disallowed=await mf.dispatchFetch('https://api.example.test/api/auth/login',{
   method:'OPTIONS',headers:{Origin:'https://bad.bpp-management-suite-staging.pages.dev'}
