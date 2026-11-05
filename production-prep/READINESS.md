@@ -146,3 +146,11 @@ Expanded `miniflare-d1.integration.test.mjs` to test server-side session rejecti
 5. Ensure old shared token bypass and legacy compatibility gates are permanently disabled, confirm Cloudflare secret provisioning and safeguards; then check real production state against a fresh pre-cutover baseline and request explicit deployment approval.
 
 **Status: HISTORICAL CREDENTIAL SCRUB REHEARSAL PASSED; PRODUCTION CUTOVER BLOCKED ON REAL ACCOUNT ENROLLMENT AND FULL CLONE REHEARSAL.**
+
+## November 5: private production-shaped rehearsal
+- Imported the November 4 Wrangler SQL export into a separate local SQLite clone, with no changes to the original SQL or live Cloudflare D1.
+- Removed 192 `pinHash` and 192 `salt` properties across all 187 stored state snapshots in the **private clone only**.
+- Recomputed and validated snapshot checksums. Verified preserved work orders (72), vendors (41), projects (11), knowledge-base entries (4), all historical revision numbers, noncredential state, audit event count, and `PRAGMA integrity_check=ok`.
+- Created two entirely synthetic peppered PIN verifier rows using random test PINs and a temporary random pepper for the cloned accounts; these are **not enrolled production credentials**, and the pepper/PINs were not exported.
+- Discovered that the original pinned full-suite HTML's Add User and Reset PIN workflows still compute SHA-256 verifiers client-side; production frontend must be changed to use server-side credential APIs. Current experimental worker has a server-side reset endpoint, but user-add integration has **not** been completed or accepted.
+- **Release remains blocked** on secure credential enrollment of both real accounts, end-to-end full-suite management flows and real Cloudflare Worker clone rehearsal. No production changes made.
