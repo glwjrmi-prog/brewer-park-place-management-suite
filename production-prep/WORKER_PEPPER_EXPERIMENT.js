@@ -688,7 +688,9 @@ async function loginWithPin(request, env, cors) {
         const derived = await pbkdf2Pin(pin, credential.salt, Number(credential.iterations), env, user.id);
         valid = timingSafeEqualText(derived, credential.verifier);
       }
-    } else if (legacyPresent && env.CREDENTIALS_ONLY !== 'enabled') {
+    }
+    if (!valid && legacyPresent && env.CREDENTIALS_ONLY !== 'enabled' &&
+        (!credential || !timingSafeEqualText(String(credential.source_pin_hash), expected))) {
       const actualLegacy = await sha256Hex(legacySalt + '|' + pin);
       valid = timingSafeEqualText(actualLegacy, expected);
       if (valid) {
