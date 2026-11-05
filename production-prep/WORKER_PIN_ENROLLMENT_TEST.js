@@ -952,8 +952,16 @@ function mergeAndAuthorizeAccess(current, proposed, principal, env) {
   if (env.SYSTEM_ADMIN_USER_ID && principal.id!==env.SYSTEM_ADMIN_USER_ID) {
     const previousOwner=before.find(u=>u.id===env.SYSTEM_ADMIN_USER_ID);
     const proposedOwner=after.find(u=>u.id===env.SYSTEM_ADMIN_USER_ID);
+    const publicProfile=p=>{
+      if(!p)return null;
+      const {pinHash,salt,passwordHash,...publicFields}=p;
+      return publicFields;
+    };
     if (!previousOwner || !proposedOwner ||
-        JSON.stringify(previousOwner)!==JSON.stringify(proposedOwner))
+        JSON.stringify(publicProfile(previousOwner))!==JSON.stringify(publicProfile(proposedOwner)) ||
+        (proposedOwner.pinHash && proposedOwner.pinHash!==previousOwner.pinHash) ||
+        (proposedOwner.salt && proposedOwner.salt!==previousOwner.salt) ||
+        (proposedOwner.passwordHash && proposedOwner.passwordHash!==previousOwner.passwordHash))
       return 'Only the system administrator may modify the system administrator account';
   }
   const saved = new Map(before.map(u => [u.id,u]));
