@@ -983,15 +983,15 @@ section{border:1px solid #d4dfd7;border-radius:12px;padding:16px;margin:12px 0}#
 small{color:#6b756b}</style>
 <h2>BPP PIN Enrollment — Isolated Test Only</h2><p>This page works only with the synthetic BPP test database, not production. Do not use real PINs or identities here.</p>
 <section><h3>1. Sign in</h3>
-<label>Test account name<input id="name" autocomplete="username" placeholder="BPP Test Admin"></label>
+<label>Test account name<input id="name" autocomplete="off" autocapitalize="none" spellcheck="false" required></label><small>Type the account name. This field starts blank.</small>
 <label>Test PIN<input id="pin" type="password" maxlength="6" inputmode="numeric" autocomplete="off"></label>
-<button id="signin">Sign in</button><button id="logout">Sign out</button><button id="who">Check session</button></section>
+<button id="signin">Sign in</button><button id="logout">Sign out</button><button id="who">Check session</button><p id="loginresult" role="status" aria-live="polite">No account signed in.</p></section>
 <section><h3>2. Enroll a new test user</h3>
-<label>New test name<input id="newname" placeholder="Enrollment Test Member"></label>
+<label>New test name<input id="newname" autocomplete="off" autocapitalize="none" spellcheck="false" required></label>
 <label>Role<select id="role"><option value="user">Authorized User</option><option value="admin">Board Administrator</option></select></label>
 <label>New test PIN<input id="newpin" maxlength="6" type="password" inputmode="numeric"></label>
 <button id="create">Create test user</button></section>
-<section><h3>3. Reset a test PIN</h3><label>Test account ID<input id="accountid" placeholder="ID from Check Session"></label>
+<section><h3>3. Reset a test PIN</h3><label>Test account ID<input id="accountid" autocomplete="off"></label>
 <label>Replacement test PIN<input id="resetpin" maxlength="6" type="password" inputmode="numeric"></label><button id="reset">Reset test PIN</button></section>
 <section><h3>4. Private Activity Log</h3><button id="activity">Check System Administrator-only access</button></section>
 <section><h3>5. Test-only historical credential cleanup</h3>
@@ -1009,15 +1009,17 @@ async function api(path,body){
   const data=await r.json();if(!r.ok)throw new Error((data.error||'HTTP '+r.status)+' ('+r.status+')');
   return data;
 }
-async function run(fn){try{await fn()}catch(e){output('Not completed: '+e.message)}}
+async function run(fn){try{await fn()}catch(e){const message='Not completed: '+e.message;output(message);by('loginresult').textContent=message}}
 by('signin').onclick=()=>run(async()=>{
-  const name=by('name').value,pin=by('pin').value;by('pin').value='';
+  const name=by('name').value.trim(),pin=by('pin').value;by('pin').value='';
+  if(!name){output('Type the account name in the blank field.');by('loginresult').textContent='Account name required.';return;}
+  by('loginresult').textContent='Checking test credentials...';
   const r=await api('/api/auth/login',{name,pin});token=r.token;
-  sessionStorage.setItem('bppEnrollmentTestToken',token);await api('/test/confirm',{});output('Signed in and test credential confirmed.',{user:r.user});
+  sessionStorage.setItem('bppEnrollmentTestToken',token);await api('/test/confirm',{});by('loginresult').textContent='Signed in as '+r.user.name+' ('+r.user.role+').';output('Signed in and test credential confirmed.',{user:r.user});
 });
 by('who').onclick=()=>run(async()=>{const r=await api('/api/auth/me');output('Verified session.',r)});
 by('logout').onclick=()=>run(async()=>{try{await api('/api/auth/logout',{})}catch{}
-  token='';sessionStorage.removeItem('bppEnrollmentTestToken');output('Signed out.')});
+  token='';sessionStorage.removeItem('bppEnrollmentTestToken');by('name').value='';by('pin').value='';by('loginresult').textContent='Signed out.';output('Signed out.')});
 by('create').onclick=()=>run(async()=>{
   const name=by('newname').value,pin=by('newpin').value,role=by('role').value;by('newpin').value='';
   const r=await api('/api/admin/user-create',{name,role,pin});output('Test user created.',r);
