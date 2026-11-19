@@ -189,3 +189,32 @@ test('shared-responsibility board-approved intake may create isolated draft',asy
  const r=await t.send('/api/requests/'+id+'/work-order-draft','board','POST',{version:2,actor:'Test board'});
  assert.equal(r.status,201);assert.equal(t.count('staged_work_order_drafts'),1);
 });
+
+test('board review releases only approved message to verified resident',async()=>{
+ const x=sandbox(),challenge=await createEmailChallenge(x.database,'home@example.com');
+ const session=await consumeEmailChallenge(x.database,challenge.privateToken);
+ async function privateCall(path,method='GET',payload=null,key='review-message-test'){
+  const headers={'authorization':'Bearer '+session.privateSession,'origin':x.env.ALLOWED_STAGING_ORIGIN};
+  if(method==='POST'){headers['content-type']='application/json';headers['idempotency-key']=key}
+  const r=await worker.fetch(new Request('https://staging.test'+path,{method,headers,body:payload===null?undefined:JSON.stringify(payload)}),x.env);
+  return {status:r.status,body:await r.json()};
+ }
+ const received=await privateCall('/api/private/requests','POST',sample());
+ assert.equal(received.status,201);
+ const pending=await privateCall('/api/my-requests');
+ assert.equal(pending.body.requests.length,1);
+ assert.equal(Object.hasOwn(pending.body.requests[0],'responsibility'),false);
+ assert.equal(Object.hasOwn(pending.body.requests[0],'residentMessage'),false);
+ const id=received.body.id;
+ const review={actor:'Test Board',notes:'PRIVATE AI draft and internal discussion',version:1,responsibility:'association',priority:'routine',residentMessage:'The board will evaluate exterior cleaning at the next maintenance meeting.'};
+ assert.equal((await x.send('/api/requests/'+id+'/review','resident','POST',review)).status,403);
+ assert.equal((await x.send('/api/requests/'+id+'/review','board','POST',{...review,residentMessage:'x'.repeat(1001)})).status,422);
+ const approved=await x.send('/api/requests/'+id+'/review','board','POST',review);
+ assert.equal(approved.status,200);
+ const after=await privateCall('/api/my-requests');
+ assert.equal(after.status,200);
+ assert.equal(after.body.requests[0].responsibility,'association');
+ assert.equal(after.body.requests[0].residentMessage,review.residentMessage);
+ assert.equal(JSON.stringify(after.body).includes('PRIVATE AI draft'),false);
+ assert.equal(JSON.stringify(after.body).includes('Test Board'),false);
+});
