@@ -1,0 +1,20 @@
+name: Maintenance Intake Sandbox Tests
+on:
+  pull_request:
+    paths:
+      - 'experiments/maintenance-intake/**'
+      - '.github/workflows/maintenance-intake-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Run isolated regression tests (no deployment)
+        run: node --experimental-sqlite --test experiments/maintenance-intake/staging-api/worker.test.mjs experiments/maintenance-intake/work-order-adapter.test.mjs
