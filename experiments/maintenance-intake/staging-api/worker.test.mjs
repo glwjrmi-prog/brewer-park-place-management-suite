@@ -218,3 +218,44 @@ test('board review releases only approved message to verified resident',async()=
  assert.equal(JSON.stringify(after.body).includes('PRIVATE AI draft'),false);
  assert.equal(JSON.stringify(after.body).includes('Test Board'),false);
 });
+
+test('board-only advisor calls existing JSON interface with sanitized area/category, never private details',async()=>{
+ const t=sandbox(),created=await t.send('/api/requests','resident','POST',{...sample(),description:'Private details: call Jane 616-555-1234 in Unit 12'},'policy-001');
+ assert.equal(created.status,201);
+ const id=created.body.id,route='/api/requests/'+id+'/policy-advice';
+ let sent=null,requestedUrl=null,callCount=0;
+ t.env.POLICY_ADVISOR_ENABLED='true';
+ t.env.POLICY_ADVISOR_TEST_FETCH=async(url,options)=>{
+  callCount++;requestedUrl=url;sent=JSON.parse(options.body);
+  return {ok:true,json:async()=>({answer:'ANSWER: Insufficient facts to assign responsibility.\\nGOVERNING PROVISIONS: None verified; board must consult source documents.'})};
+ };
+ assert.equal((await t.send(route,'resident','GET')).status,403);
+ assert.equal((await t.send(route,'resident','POST',{version:1,actor:'Fake resident'})).status,403);
+ assert.equal((await t.send(route,'board','POST',{version:2,actor:'Board A'})).status,409);
+ assert.equal((await t.send(route,'board','POST',{version:1,actor:'Board A'})).status,201);
+ assert.equal(callCount,1);
+ assert.equal(requestedUrl,'https://bpp-resident-policy-advisor.glwjrmi.workers.dev/');
+ assert.equal(typeof sent.question,'string');
+ assert.equal(sent.question.includes('Siding'),true);
+ assert.equal(sent.question.includes('Exterior of unit'),true);
+ assert.equal(JSON.stringify(sent).includes('Jane'),false);
+ assert.equal(JSON.stringify(sent).includes('616-555'),false);
+ assert.equal(JSON.stringify(sent).includes('Unit 12'),false);
+ assert.equal(t.count('intake_policy_advice'),1);
+ const view=await t.send(route,'board','GET');
+ assert.equal(view.status,200);assert.equal(view.body.verified,false);assert.equal(view.body.boardOnly,true);
+ const residentData=JSON.stringify((await t.send('/api/requests','board')).body);
+ assert.equal(residentData.includes('Insufficient facts'),false);
+ assert.equal((await t.send(route,'board','POST',{version:1,actor:'Board B'})).status,409);
+ assert.equal(callCount,1);
+});
+test('disabled or failing advisor makes no advice record and cannot leak to residents',async()=>{
+ const t=sandbox(),created=await t.send('/api/requests','resident','POST',sample(),'policy-002'),id=created.body.id;
+ const route='/api/requests/'+id+'/policy-advice';
+ assert.equal((await t.send(route,'board','POST',{version:1,actor:'Board'})).status,503);
+ assert.equal(t.count('intake_policy_advice'),0);
+ t.env.POLICY_ADVISOR_ENABLED='true';
+ t.env.POLICY_ADVISOR_TEST_FETCH=async()=>({ok:false,json:async()=>({error:'Down'})});
+ assert.equal((await t.send(route,'board','POST',{version:1,actor:'Board'})).status,502);
+ assert.equal(t.count('intake_policy_advice'),0);
+});
