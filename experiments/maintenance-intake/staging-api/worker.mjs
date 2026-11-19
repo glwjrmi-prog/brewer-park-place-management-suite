@@ -1,5 +1,6 @@
 // BPP maintenance intake — ISOLATED STAGING CANDIDATE. NO production integration.
 import {residentRequests,authenticatedEmail} from './resident-access.mjs';
+import {askAdvisor} from './policy-advisor.mjs';
 // Bind INTAKE_DB to a NEW, dedicated D1 database; do not bind Suite v9 DB.
 // RESIDENT_STAGING_TOKEN and BOARD_STAGING_TOKEN are distinct temporary test credentials.
 // Not for public deployment: live release requires existing BPP per-user PIN sessions,
@@ -104,6 +105,35 @@ async function listWorkOrderDrafts(env,headers){
  const result=await env.INTAKE_DB.prepare("SELECT d.id AS draftId,d.intake_request_id AS intakeRequestId,d.created_at AS createdAt,d.created_by AS createdBy,i.unit,i.category,i.description,i.priority,i.responsibility,i.reviewed_at AS reviewedAt FROM staged_work_order_drafts d JOIN intake_requests i ON i.id=d.intake_request_id ORDER BY d.created_at DESC LIMIT 100").all();
  return encode({ok:true,mode:'isolated_staging_only',drafts:result.results||[]},200,headers);
 }
+async function policyAdvice(req,env,id,headers){
+ const row=await env.INTAKE_DB.prepare('SELECT id,area,category,status,version FROM intake_requests WHERE id=?').bind(id).first();
+ if(!row)return encode({error:'Request not found'},404,headers);
+ if(req.method==='GET'){
+  const record=await env.INTAKE_DB.prepare('SELECT answer,question,advisor_source AS source,requested_by AS requestedBy,requested_at AS requestedAt,request_version AS requestVersion FROM intake_policy_advice WHERE request_id=?').bind(id).first();
+  return record?encode({ok:true,verified:false,boardOnly:true,advice:record},200,headers):encode({ok:true,verified:false,boardOnly:true,advice:null},200,headers);
+ }
+ let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ if(!Number.isInteger(body?.version)||!str(body?.actor,120))return encode({error:'Current version and board actor required'},422,headers);
+ if(row.status!=='pending_board_review')return encode({error:'Policy lookup is available before board decision only'},409,headers);
+ if(row.version!==body.version)return encode({error:'Request changed: refresh before lookup',code:'VERSION_CONFLICT'},409,headers);
+ if(env.POLICY_ADVISOR_ENABLED!=='true')return encode({error:'Advisor integration disabled in staging configuration'},503,headers);
+ const existing=await env.INTAKE_DB.prepare('SELECT request_id FROM intake_policy_advice WHERE request_id=?').bind(id).first();
+ if(existing)return encode({error:'Advice already recorded',code:'ALREADY_ADVISED'},409,headers);
+ // Send ONLY the general area and category; never resident/unit/description/email.
+ const fetcher=typeof env.POLICY_ADVISOR_TEST_FETCH==='function'?env.POLICY_ADVISOR_TEST_FETCH:fetch;
+ let advice;
+ try{advice=await askAdvisor({area:row.area,category:row.category,fetcher,signal:AbortSignal.timeout(10000)})}
+ catch(e){console.error('Policy Advisor unavailable in isolated staging',e);return encode({error:'Advisor unavailable; board must review governing documents directly'},502,headers)}
+ const now=new Date().toISOString(),actor=body.actor.trim();
+ try{
+  const result=await env.INTAKE_DB.batch([
+   env.INTAKE_DB.prepare("INSERT INTO intake_policy_advice(request_id,answer,question,advisor_source,requested_by,requested_at,request_version) SELECT id,?,?,?,?,?,? FROM intake_requests WHERE id=? AND version=? AND status='pending_board_review'").bind(advice.answer,advice.question,advice.source,actor,now,body.version,id,body.version),
+   env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT request_id,'policy_advice_recorded','board',?,?,? FROM intake_policy_advice WHERE request_id=? AND requested_at=?").bind(actor,now,JSON.stringify({verified:false,category:row.category}),id,now)
+  ]);
+  if(Number(result?.[0]?.meta?.changes||0)!==1||Number(result?.[1]?.meta?.changes||0)!==1)return encode({error:'Request changed before advice was saved',code:'VERSION_CONFLICT'},409,headers);
+ }catch(e){console.error('Policy advice staging write failed',e);return encode({error:'Could not save preliminary advice'},409,headers)}
+ return encode({ok:true,boardOnly:true,verified:false,advice:{answer:advice.answer,question:advice.question,source:advice.source,requestedBy:actor,requestedAt:now},warning:'Preliminary unverified advice only. Board must inspect source documents before determining responsibility.'},201,headers);
+}
 async function review(req,env,id,headers){
  let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
  if(!responsibilities.has(body?.responsibility)||!priorities.has(body?.priority)||!Number.isInteger(body?.version)||!str(body?.actor,120)||!str(body?.notes,2000))
@@ -154,6 +184,8 @@ export default {async fetch(req,env){
   if(url.pathname==='/api/requests'&&req.method==='POST'&&role==='resident')return submit(req,env,headers);
   if(url.pathname==='/api/requests'&&req.method==='GET'&&role==='board')return list(env,headers);
   if(url.pathname==='/api/work-order-drafts'&&req.method==='GET'&&role==='board')return listWorkOrderDrafts(env,headers);
+  const advisor=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/policy-advice$/);
+  if(advisor&&(req.method==='GET'||req.method==='POST')&&role==='board')return policyAdvice(req,env,advisor[1],headers);
   const draft=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/work-order-draft$/);
   if(draft&&req.method==='POST'&&role==='board')return createWorkOrderDraft(req,env,draft[1],headers);
   const ack=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/acknowledge$/);
