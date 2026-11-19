@@ -60,3 +60,11 @@ The pure work-order adapter has been exercised with synthetic input for sequence
 
 ## Urgent alert walkthrough (offline only)
 `demo-v3.html` illustrates a safety message for reported urgency, a simulated simultaneous alert to all active board members, and an explicit claim-of-coordination action. No messages are sent and no actual emergency contact is assumed. The user-facing downloadable preview may be distributed as a local HTML file for private evaluation; it is not a deployed or access-controlled service. Before real use, confirm board contacts, notification provider, verified resident authentication and escalation plan.
+
+
+## Urgent board-wide staging workflow — source implemented, not deployed
+The isolated `staging-api/schema.sql` now includes an urgent acknowledgement owner/time, and a unique per-request recipient outbox. The Worker creates an urgent request, its intake audit entry, and one simulated alert entry per configured test board identity in a single D1 transaction. It intentionally has **no email-delivery implementation**. The temporary recipient identities are opaque strings supplied through `STAGING_BOARD_RECIPIENT_KEYS` (JSON array such as `["test-board-a","test-board-b","test-board-c"]`). No live board emails, account list, resident contacts or real notifications are accessed.
+
+The new board-only `POST /api/requests/:id/acknowledge` endpoint uses a version-checked, compare-and-swap claim and records an audit event in the same transaction. It rejects nonurgent requests, already-acknowledged items, and stale versions. `GET /api/requests` returns acknowledgement status for the *staging board*, not a public resident endpoint. Source syntax was checked, but **database and end-to-end tests are still pending**.
+
+Do not treat staging token roles, client-supplied reviewer names, or temporary recipient configuration as production authentication. Before any public website connection, replace them with server-verified existing BPP identity and dynamically fetched active board membership. No delivery, acknowledgement SLA, or emergency dispatch guarantee is in place.
