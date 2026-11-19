@@ -38,3 +38,7 @@
 
 ## Safe UI demo
 Open `index.html` locally; enter invented unit details only. Use the Board review simulation tab to approve a demo request. No changes persist.
+
+
+## Work-order mapping preview (not connected)
+The pure `work-order-adapter.mjs` implements a **side-effect-free** conversion from an explicitly board-reviewed, association/shared-responsibility sample request to the existing Management Suite v9 work-order field names. It uses the highest current work-order sequence rather than array length, refuses unreviewed or owner-only issues, rejects duplicate linked requests, and leaves the supplied state untouched. `work-order-adapter.test.mjs` contains Node regression tests. **No actual work order is written by this adapter**. Production integration requires fresh authoritative state and a revision-checked backend save, never a browser-side copy.
