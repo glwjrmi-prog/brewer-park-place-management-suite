@@ -1,29 +1,40 @@
-# Maintenance Intake — isolated design prototype (19 Nov 2026)
+# BPP maintenance intake — protected development prototype (2026-11-19)
 
-**NOT PRODUCTION.** The files in this folder are an experimental resident intake / board review UI only. Do not merge or deploy them as-is. `index.html` works as a standalone static page, keeps fictitious requests in memory only, and makes **no** network requests.
+**NOT LIVE. DO NOT MERGE OR DEPLOY AS-IS.** Draft PR #3. No changes have been made to the resident website, production Management Suite, existing D1 databases, PIN login, or live work orders.
 
-## Scope implemented
-- Resident request intake: unit/location, area, issue type, description, escalation flag.
-- Simulated request ID and pending-board-review queue.
-- Board reviewer can select a responsibility classification and priority, enter notes, and approve a *demo-only* decision.
-- Resident receives an acknowledgement only, **never** an unreviewed AI ruling.
-- Emergency warning and explicit production-disconnect banner.
+## Two independent parts
 
-## Deliberately not implemented
-- No Cloudflare endpoints, Policy Advisor calls, real AI assessment, resident authentication, uploads, notifications, durable persistence, live website, or Management Suite work-order writes.
-- This prototype's board tab is **not access-controlled**. It is a presentation mockup, never a real board view.
-- Demonstration IDs are not valid work-order IDs. Placeholder categories are not legal advice.
-- No real Maintenance Matrix, Master Deed, or Bylaws content was verified in this branch.
+1. `index.html` — **browser-only UX demo** for a resident form and simulated board review queue. It uses in-memory sample data; refreshing clears everything. It does not make network requests.
+2. `staging-api/worker.mjs`, `schema.sql`, and `wrangler.toml.example` — **undeployed isolated Cloudflare Worker candidate** and separate D1 schema. These are source files only, not a configured or operational endpoint. The backend accepts simulated resident submissions, returns tracking IDs, keeps pending items board-only, and records board review decisions. **It does not create Management Suite work orders**.
 
-## Required implementation gates before any live integration
-1. Identify the canonical Maintenance Matrix / deed / bylaws / rules versions. AI must quote or reference exact provisions and signal ambiguity; separate *responsibility for work* from *responsibility for cost*. Default to human review.
-2. Resident authentication / per-unit authorization, CSRF protection, rate limiting and anti-abuse, safe attachment handling, validation, and redaction of private resident information in AI context.
-3. Server-owned intake ID plus idempotency key and duplicate detection. Do not let browsers write authoritative work orders or forge priority/status/board approval.
-4. Integrate only via a dedicated authenticated Cloudflare endpoint with explicit role checks and strict staging D1 binding. Never use production token, cookie, Worker binding, or production D1.
-5. Preserve Management Suite v9 authoritative revision protections (stale-save rejection, destructive-change blocking, backup/history/restore, audit provenance). Ensure append-only request intake cannot overwrite the current state.
-6. Separate board-only AI memo from resident-visible acknowledgement. Reviewer identity, document references, and decision timestamps must be audited. Do not make acceptance of AI recommendation mandatory.
-7. Test duplicate submission, invalid request, conflicting documents, urgency escalation, rejected request, multiple users at once, stale revisions, no network, failed AI, upload abuse, unauthorized board access, audit and rollback.
-8. Obtain explicit owner approval **after** staging acceptance tests. Then and only then plan a separately authorized production release.
+## Intended staged API contract
+- `POST /api/requests` — staging resident token; requires `Idempotency-Key`; validated unit, area, category, description, escalation. Creates an intake request pending board review.
+- `GET /api/requests` — staging board token; returns board queue and a clearly unverified advisory placeholder (no fabricated governing-document citations).
+- `POST /api/requests/:id/review` — staging board token; requires reviewer, notes, responsibility, priority, and current optimistic concurrency version. Rejects a stale review.
+- `GET /health` — minimal staging health result.
 
-## Safe demo
-Open `index.html` from this branch as a static page and use invented unit details. Refresh clears all data. Do not enter resident personal information.
+## Safety boundaries
+- The Worker **must be bound to a newly created dedicated `INTAKE_DB`**; never reuse the Suite's production D1, Suite staging D1, or Cloudflare binding.
+- All staging secrets must be created out-of-band. The temporary shared resident token / board token are suitable for a **private integration test only**, not a public resident website. Public rollout requires existing BPP signed-in user identity, verified unit permissions, board role verification, CSRF protection and rate limits.
+- Browser demo's board tab is not access controlled: never publish it as an actual board view.
+- No AI calls or actual governing document content are installed. Initial decision is `not_assessed`; only board reviewers can determine responsibility and priority.
+- Never accept responsibility, priority or board approval from a resident.
+- Intake IDs and idempotency keys are separate from authoritative Suite work-order IDs.
+- This API has no code path or binding for reading/updating Suite v9 authoritative state.
+- Production Suite revision history, conflict checks and undo/restore must remain unchanged.
+- No sensitive personal data should be used in this prototype. Do not commit resident submissions.
+
+## Before a deployment even to private staging
+1. Validate and test schema and Worker with isolated synthetic data; stage secrets and origin restrictions.
+2. Verify submission retry with the same key returns the original ID; same key with modified payload returns conflict; invalid fields and forbidden roles are rejected.
+3. Validate board concurrent review conflicts, audit history completeness, privacy isolation and authentication failures.
+4. Add server-side rate limiting and verification suitable for any test exposure beyond a trusted private setting.
+5. Integrate the existing authenticated resident/board roles; don't put any shared API secret in a public website.
+6. Build a verified AI Policy Advisor interface with **exact Maintenance Matrix / deed / bylaws / rules citations and version stamps**. Distinguish maintenance task owner from cost allocation and flag disagreement or uncertainty.
+7. Add server-owned work-order append adapter to Suite v9 **on staging only**, preserving revision safety, no destructive overwrites, audit and rollback.
+8. Include duplicates by issue/location, resident request status, photo-upload security, controlled notifications, and emergency handling.
+9. Run multi-user, retries, policy ambiguity, malicious input, offline, failure, and full rollback acceptance tests.
+10. Obtain **explicit approval before any production publication or deployment**.
+
+## Safe UI demo
+Open `index.html` locally; enter invented unit details only. Use the Board review simulation tab to approve a demo request. No changes persist.
