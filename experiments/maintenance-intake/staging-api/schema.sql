@@ -54,3 +54,14 @@ CREATE TABLE IF NOT EXISTS staged_work_order_drafts (
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status='draft')
 );
 CREATE INDEX IF NOT EXISTS idx_work_order_draft_created ON staged_work_order_drafts(created_at DESC);
+
+-- Board-only unverified Policy Advisor response. Never included in resident views.
+CREATE TABLE IF NOT EXISTS intake_policy_advice (
+  request_id TEXT PRIMARY KEY REFERENCES intake_requests(id),
+  answer TEXT NOT NULL,
+  question TEXT NOT NULL,
+  advisor_source TEXT NOT NULL,
+  requested_by TEXT NOT NULL,
+  requested_at TEXT NOT NULL,
+  request_version INTEGER NOT NULL
+);
