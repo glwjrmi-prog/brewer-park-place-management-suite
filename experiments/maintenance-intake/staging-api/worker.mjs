@@ -74,6 +74,35 @@ async function acknowledgeUrgent(req,env,id,headers){
   return encode({error:'Another board member changed this request',code:'VERSION_CONFLICT'},409,headers);
  return encode({ok:true,id,urgentAcknowledged:true,coordinator:actor,version:body.version+1,notice:'Simulated board acknowledgement only. No alerts sent and no contractor dispatched.'},200,headers);
 }
+async function createWorkOrderDraft(req,env,id,headers){
+ // No Suite data is read or written. This is an isolated staging record only.
+ let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ if(!Number.isInteger(body?.version)||!str(body?.actor,120))return encode({error:'Current version and staging board actor required'},422,headers);
+ const r=await env.INTAKE_DB.prepare('SELECT id,status,responsibility,priority,version,unit,category,description,reviewed_at,board_actor FROM intake_requests WHERE id=?').bind(id).first();
+ if(!r)return encode({error:'Request not found'},404,headers);
+ if(r.status!=='reviewed'||!['association','shared_or_disputed'].includes(r.responsibility)||!r.reviewed_at||!r.board_actor)return encode({error:'Only board-approved HOA/shared requests qualify for a draft'},422,headers);
+ if(r.version!==body.version)return encode({error:'Request changed: refresh before retrying',code:'VERSION_CONFLICT'},409,headers);
+ const already=await env.INTAKE_DB.prepare('SELECT id FROM staged_work_order_drafts WHERE intake_request_id=?').bind(id).first();
+ if(already)return encode({error:'Draft already exists',code:'DUPLICATE_DRAFT',draftId:already.id},409,headers);
+ const draftId='BPP-DRAFT-'+crypto.randomUUID(),now=new Date().toISOString(),actor=body.actor.trim();
+ try{
+  // DB transaction guards review/version and intake uniqueness; no Suite writes.
+  const result=await env.INTAKE_DB.batch([
+   env.INTAKE_DB.prepare("INSERT INTO staged_work_order_drafts(id,intake_request_id,created_by,created_at) SELECT ?,id,?,? FROM intake_requests WHERE id=? AND version=? AND status='reviewed' AND responsibility IN ('association','shared_or_disputed') AND reviewed_at IS NOT NULL AND board_actor IS NOT NULL").bind(draftId,actor,now,id,body.version),
+   env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT intake_request_id,'staging_work_order_drafted','board',?,?,? FROM staged_work_order_drafts WHERE id=?").bind(actor,now,JSON.stringify({draftId,mode:'isolated_staging_only'}),draftId)
+  ]);
+  if(Number(result?.[0]?.meta?.changes||0)!==1||Number(result?.[1]?.meta?.changes||0)!==1)return encode({error:'Draft creation conflict: refresh',code:'VERSION_CONFLICT'},409,headers);
+ }catch(e){
+  const existing=await env.INTAKE_DB.prepare('SELECT id FROM staged_work_order_drafts WHERE intake_request_id=?').bind(id).first();
+  if(existing)return encode({error:'Draft already exists',code:'DUPLICATE_DRAFT',draftId:existing.id},409,headers);
+  throw e;
+ }
+ return encode({ok:true,draftId,intakeRequestId:id,mode:'isolated_staging_only',status:'draft',notice:'Not a Suite work order. No vendor or maintenance action authorized.'},201,headers);
+}
+async function listWorkOrderDrafts(env,headers){
+ const result=await env.INTAKE_DB.prepare("SELECT d.id AS draftId,d.intake_request_id AS intakeRequestId,d.created_at AS createdAt,d.created_by AS createdBy,i.unit,i.category,i.description,i.priority,i.responsibility,i.reviewed_at AS reviewedAt FROM staged_work_order_drafts d JOIN intake_requests i ON i.id=d.intake_request_id ORDER BY d.created_at DESC LIMIT 100").all();
+ return encode({ok:true,mode:'isolated_staging_only',drafts:result.results||[]},200,headers);
+}
 async function review(req,env,id,headers){
  let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
  if(!responsibilities.has(body?.responsibility)||!priorities.has(body?.priority)||!Number.isInteger(body?.version)||!str(body?.actor,120)||!str(body?.notes,2000))
@@ -120,6 +149,9 @@ export default {async fetch(req,env){
  try{
   if(url.pathname==='/api/requests'&&req.method==='POST'&&role==='resident')return submit(req,env,headers);
   if(url.pathname==='/api/requests'&&req.method==='GET'&&role==='board')return list(env,headers);
+  if(url.pathname==='/api/work-order-drafts'&&req.method==='GET'&&role==='board')return listWorkOrderDrafts(env,headers);
+  const draft=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/work-order-draft$/);
+  if(draft&&req.method==='POST'&&role==='board')return createWorkOrderDraft(req,env,draft[1],headers);
   const ack=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/acknowledge$/);
   if(ack&&req.method==='POST'&&role==='board')return acknowledgeUrgent(req,env,ack[1],headers);
   const m=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/review$/);
