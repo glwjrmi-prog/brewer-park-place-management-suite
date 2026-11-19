@@ -8,6 +8,7 @@ const allowedAreas=new Set(['Exterior of unit','Common area / grounds','Interior
 const allowedCategories=new Set(['Exterior trim / paint','Siding','Roof / gutters','Doors / windows','Landscaping / grounds','Drainage / water','Sidewalk / pavement','Other']);
 const responsibilities=new Set(['association','owner','shared_or_disputed','requires_more_information']);
 const priorities=new Set(['routine','high','emergency']);
+const approvedResidentMessages={association:'The board reviewed your request and identified this as an association maintenance matter. The association will determine next steps.',owner:'The board reviewed your request and determined that the owner is responsible for this maintenance.',shared_or_disputed:'The board reviewed the request. Additional coordination may be needed to determine the applicable responsibilities.',requires_more_information:'The board reviewed your request and needs more information before determining responsibility.'};
 const encode=(body,status=200,headers={})=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff',...headers}});
 const str=(v,max)=>typeof v==='string'&&v.trim().length>0&&v.trim().length<=max?v.trim():null;
 function equal(a,b){if(!a||!b||a.length!==b.length)return false;let z=0;for(let i=0;i<a.length;i++)z|=a.charCodeAt(i)^b.charCodeAt(i);return z===0;}
@@ -107,6 +108,9 @@ async function review(req,env,id,headers){
  let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
  if(!responsibilities.has(body?.responsibility)||!priorities.has(body?.priority)||!Number.isInteger(body?.version)||!str(body?.actor,120)||!str(body?.notes,2000))
   return encode({error:'Board review requires responsibility, priority, current version, reviewer, and notes'},422,headers);
+ if(body?.residentMessage!==undefined&&(typeof body.residentMessage!=='string'||body.residentMessage.trim().length>1000))return encode({error:'Resident communication must be 1000 characters or fewer'},422,headers);
+ // Never publish AI draft notes or document citations automatically. Board controls release.
+ const message=body?.residentMessage?.trim()||approvedResidentMessages[body.responsibility];
  const existing=await env.INTAKE_DB.prepare('SELECT version,status FROM intake_requests WHERE id=?').bind(id).first();
  if(!existing)return encode({error:'Request not found'},404,headers);
  if(existing.status!=='pending_board_review'||existing.version!==body.version)return encode({error:'Review conflict: refresh before retrying',code:'VERSION_CONFLICT'},409,headers);
@@ -114,8 +118,8 @@ async function review(req,env,id,headers){
  // D1 batch provides one transaction for status change and its audit event.
  // The event SELECT only inserts when this version transition actually succeeded.
  const statements=[
-  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='reviewed', responsibility=?,priority=?,review_notes=?,board_actor=?,reviewed_at=?,version=version+1 WHERE id=? AND version=? AND status='pending_board_review'").bind(body.responsibility,body.priority,body.notes.trim(),body.actor.trim(),now,id,body.version),
-  env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'board_reviewed','board',?, ?, ? FROM intake_requests WHERE id=? AND version=? AND status='reviewed' AND board_actor=? AND reviewed_at=?").bind(body.actor.trim(),now,JSON.stringify({responsibility:body.responsibility,priority:body.priority,notes:body.notes.trim()}),id,body.version+1,body.actor.trim(),now)
+  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='reviewed', responsibility=?,priority=?,review_notes=?,resident_message=?,board_actor=?,reviewed_at=?,version=version+1 WHERE id=? AND version=? AND status='pending_board_review'").bind(body.responsibility,body.priority,body.notes.trim(),message,body.actor.trim(),now,id,body.version),
+  env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'board_reviewed','board',?, ?, ? FROM intake_requests WHERE id=? AND version=? AND status='reviewed' AND board_actor=? AND reviewed_at=?").bind(body.actor.trim(),now,JSON.stringify({responsibility:body.responsibility,priority:body.priority,notes:body.notes.trim(),residentMessage:message}),id,body.version+1,body.actor.trim(),now)
  ];
  const result=await env.INTAKE_DB.batch(statements);
  if(Number(result?.[0]?.meta?.changes||0)!==1||Number(result?.[1]?.meta?.changes||0)!==1)
