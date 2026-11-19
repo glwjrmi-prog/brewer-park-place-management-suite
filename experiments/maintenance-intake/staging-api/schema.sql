@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS intake_requests (
   responsibility TEXT,
   priority TEXT,
   review_notes TEXT,
+  resident_message TEXT,
   board_actor TEXT,
   created_at TEXT NOT NULL,
   reviewed_at TEXT,
