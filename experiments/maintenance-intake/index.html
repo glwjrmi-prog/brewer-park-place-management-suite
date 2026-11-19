@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BPP Maintenance Intake — Isolated Prototype</title>
+<style>
+:root{font-family:system-ui,Segoe UI,Arial,sans-serif;color:#193d30;background:#f2f5f2}*{box-sizing:border-box}body{margin:0}
+header{background:#173d2c;color:white;padding:20px max(20px,calc((100% - 920px)/2))}header h1{margin:4px 0}main{max-width:920px;margin:24px auto;padding:0 16px}
+.notice{background:#fff4dc;border:1px solid #a67922;padding:13px;border-radius:10px;margin-bottom:18px}
+.tabs{display:flex;gap:8px;margin-bottom:16px}.tabs button{flex:1}
+button{border:1px solid #a6b9ae;border-radius:9px;padding:11px 15px;cursor:pointer;background:white;color:#153a29;font-weight:650}
+button.primary{background:#19563b;color:white;border-color:#19563b}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #6aa17f}
+section{background:white;padding:22px;border-radius:14px;box-shadow:0 4px 15px #1232;margin-bottom:16px}
+label{display:block;font-weight:650;margin:15px 0 5px}input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid #acbcb1;border-radius:8px}textarea{min-height:110px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.small{color:#52645b;font-size:.91rem}.pill{display:inline-block;padding:4px 9px;border-radius:99px;background:#e9eee9;font-size:.8rem}
+.card{border:1px solid #d7e2d8;border-radius:10px;padding:15px;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+[hidden]{display:none!important}.danger{color:#9b3125}.muted{color:#5b6b62}pre{white-space:pre-wrap}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<header><div class="small" style="color:#cfe5d2">BREWER PARK PLACE · DESIGN PREVIEW</div><h1>Maintenance Request Center</h1></header>
+<main><div class="notice"><strong>PROTOTYPE ONLY — NOT LIVE.</strong> Nothing here connects to the resident website, Management Suite, Cloudflare Worker, AI service, or production database. Data stays only in this open browser tab. Use fictitious information.</div>
+<div class="tabs"><button id="residentTab" class="primary" type="button">Resident view</button><button id="boardTab" type="button">Board review simulation</button></div>
+<section id="resident"><h2>Request maintenance</h2><p class="small">For emergencies involving immediate danger or active damage, use the association's established emergency contact procedure. This demo is not monitored.</p>
+<form id="requestForm">
+<div class="grid"><div><label for="unit">Unit / location</label><input id="unit" required maxlength="80" placeholder="Example: Building A, unit 12"></div>
+<div><label for="area">Location type</label><select id="area"><option>Exterior of unit</option><option>Common area / grounds</option><option>Interior of unit</option></select></div></div>
+<label for="category">Type of issue</label><select id="category"><option>Exterior trim / paint</option><option>Siding</option><option>Roof / gutters</option><option>Doors / windows</option><option>Landscaping / grounds</option><option>Drainage / water</option><option>Sidewalk / pavement</option><option>Other</option></select>
+<label for="description">Describe the issue and exact location</label><textarea id="description" required maxlength="2000" placeholder="What have you observed? When did you first notice it?"></textarea>
+<label for="change">New safety hazard or worsening condition?</label><select id="change"><option value="no">No</option><option value="yes">Yes</option></select>
+<p class="small">Photos, secure identification, document citations, and real submissions will be part of a later integration phase, not this demo.</p>
+<button class="primary" type="submit">Create sample request</button></form><div id="confirmation" role="status" aria-live="polite"></div></section>
+<section id="board" hidden><h2>Board review queue <span id="count" class="pill">0 pending</span></h2><p class="small">Demonstration only. All requests are marked Pending Board Review. Rules below are placeholder routing prompts, <strong>not AI interpretations of governing documents</strong>. No resident sees a responsibility decision until a board member approves it.</p>
+<div id="queue"><p class="muted">No requests yet. Create one in Resident view.</p></div></section>
+<section><h3>Proposed workflow</h3><p class="small">Submitted → Pending board review → Board-approved classification & priority → Resident update → Scheduled/deferred/completed. Only the approved board outcome should become resident-visible. Production must use authenticated server-side work-order creation with audit history, revision checks, access control, and duplicate detection.</p></section></main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id), requests=[];let next=1;
+const text=(tag,content,cls)=>{const e=document.createElement(tag);e.textContent=content;if(cls)e.className=cls;return e;};
+function tab(board){$('resident').hidden=board;$('board').hidden=!board;$('residentTab').classList.toggle('primary',!board);$('boardTab').classList.toggle('primary',board);if(board)render();}
+$('residentTab').addEventListener('click',()=>tab(false));$('boardTab').addEventListener('click',()=>tab(true));
+$('requestForm').addEventListener('submit',e=>{e.preventDefault();const unit=$('unit').value.trim(),description=$('description').value.trim();if(!unit||!description)return;
+const r={id:'DEMO-'+String(next++).padStart(4,'0'),unit,area:$('area').value,category:$('category').value,description,change:$('change').value,status:'Pending Board Review',classification:'Needs document review',priority:$('change').value==='yes'?'Safety triage needed':'Routine (provisional)',notes:''};
+requests.push(r);$('requestForm').reset();$('confirmation').replaceChildren(text('p','Sample request '+r.id+' created. The board review queue now contains this request; no real submission occurred.'));render();});
+function render(){const q=$('queue');q.replaceChildren();$('count').textContent=requests.filter(r=>r.status==='Pending Board Review').length+' pending';if(!requests.length){q.append(text('p','No requests yet. Create one in Resident view.','muted'));return;}
+requests.slice().reverse().forEach(r=>{const card=text('article','','card');card.append(text('h3',r.id+' · '+r.category),text('p',r.unit+' · '+r.area),text('p',r.description),text('p','Status: '+r.status+' | Reported escalation: '+(r.change==='yes'?'Yes':'No')));if(r.status==='Pending Board Review'){
+const label=text('label','Board determination');const s=document.createElement('select');['Needs document review','Likely association responsibility','Likely owner responsibility','Shared / disputed responsibility'].forEach(v=>{const o=document.createElement('option');o.value=o.textContent=v;s.append(o)});s.value=r.classification;
+const pLabel=text('label','Board priority');const p=document.createElement('select');['Routine','High','Emergency / immediate review'].forEach(v=>{const o=document.createElement('option');o.value=o.textContent=v;p.append(o)});p.value=r.change==='yes'?'High':'Routine';
+const nLabel=text('label','Board-only review notes');const n=document.createElement('textarea');n.placeholder='Record citations and rationale before approval';n.value=r.notes;
+const buttons=text('div','','actions');const approve=text('button','Approve review','primary');approve.type='button';approve.addEventListener('click',()=>{if(s.value==='Needs document review'){alert('Choose a board determination before approval.');return}r.classification=s.value;r.priority=p.value;r.notes=n.value;r.status='Reviewed — Demo Only';render()});
+buttons.append(approve);card.append(label,s,pLabel,p,nLabel,n,buttons);
+}else{card.append(text('p','Board decision: '+r.classification+' | Priority: '+r.priority),text('p','Review notes: '+(r.notes||'None')));}
+q.append(card)});
+}
+})();
+</script></body></html>
