@@ -1,5 +1,5 @@
 // BPP maintenance intake — ISOLATED STAGING CANDIDATE. NO production integration.
-import {residentRequests} from './resident-access.mjs';
+import {residentRequests,authenticatedEmail} from './resident-access.mjs';
 // Bind INTAKE_DB to a NEW, dedicated D1 database; do not bind Suite v9 DB.
 // RESIDENT_STAGING_TOKEN and BOARD_STAGING_TOKEN are distinct temporary test credentials.
 // Not for public deployment: live release requires existing BPP per-user PIN sessions,
@@ -23,13 +23,13 @@ function stagingRecipients(env){
  if(names.some(x=>typeof x!=='string'||!/^test-board-[a-z0-9-]{1,35}$/.test(x)))return null;
  return [...new Set(names)];
 }
-async function submit(req,env,headers){
+async function submit(req,env,headers,ownerEmail=null){
  let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
  const key=req.headers.get('idempotency-key')||'';
  if(!validRequest(body,key))return encode({error:'Invalid fields or missing idempotency key'},422,headers);
- const exists=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation FROM intake_requests WHERE submission_key=?').bind(key).first();
+ const exists=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation,submitter_email FROM intake_requests WHERE submission_key=?').bind(key).first();
  if(exists){
-  const same=exists.unit===body.unit.trim()&&exists.area===body.area&&exists.category===body.category&&exists.description===body.description.trim()&&!!exists.escalation===body.escalation;
+  const same=exists.submitter_email===ownerEmail&&exists.unit===body.unit.trim()&&exists.area===body.area&&exists.category===body.category&&exists.description===body.description.trim()&&!!exists.escalation===body.escalation;
   return same?encode({ok:true,id:exists.id,status:'pending_board_review',duplicate:true},200,headers):encode({error:'Idempotency key already used for different request'},409,headers);
  }
  const id='BPP-STG-'+crypto.randomUUID(),now=new Date().toISOString();
@@ -38,7 +38,7 @@ async function submit(req,env,headers){
  if(recipients===null)return encode({error:'Urgent intake is unavailable: board alert configuration missing'},503,headers);
  try{
   const statements=[
-   env.INTAKE_DB.prepare('INSERT INTO intake_requests(id,submission_key,unit,area,category,description,escalation,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,key,body.unit.trim(),body.area,body.category,body.description.trim(),body.escalation?1:0,'pending_board_review',now),
+   env.INTAKE_DB.prepare('INSERT INTO intake_requests(id,submission_key,unit,area,category,description,escalation,status,created_at,submitter_email) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,key,body.unit.trim(),body.area,body.category,body.description.trim(),body.escalation?1:0,'pending_board_review',now,ownerEmail),
    env.INTAKE_DB.prepare('INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) VALUES(?,?,?,?,?,?)').bind(id,'submitted','resident','staging resident',now,JSON.stringify({escalation:body.escalation}))
   ];
   for(const recipient of recipients)statements.push(env.INTAKE_DB.prepare("INSERT INTO urgent_alert_outbox(request_id,recipient_key,status,created_at) VALUES(?,?,'simulation_pending',?)").bind(id,recipient,now));
@@ -47,7 +47,7 @@ async function submit(req,env,headers){
  }catch(e){
   // Racing same-key submissions: return existing receipt, never make duplicate work orders.
   const row=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation FROM intake_requests WHERE submission_key=?').bind(key).first();
-  if(row){const same=row.unit===body.unit.trim()&&row.area===body.area&&row.category===body.category&&row.description===body.description.trim()&&!!row.escalation===body.escalation;return same?encode({ok:true,id:row.id,status:'pending_board_review',duplicate:true},200,headers):encode({error:'Idempotency key conflict'},409,headers)}
+  if(row){const same=row.submitter_email===ownerEmail&&row.unit===body.unit.trim()&&row.area===body.area&&row.category===body.category&&row.description===body.description.trim()&&!!row.escalation===body.escalation;return same?encode({ok:true,id:row.id,status:'pending_board_review',duplicate:true},200,headers):encode({error:'Idempotency key conflict'},409,headers)}
   throw e;
  }
  return encode({ok:true,id,status:'pending_board_review',disclaimer:'Board review required. No responsibility decision has been made.'},201,headers);
@@ -101,12 +101,17 @@ export default {async fetch(req,env){
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
  // PRIVATE READ: only a separately verified, short-lived resident session may list requests.
  // Do not accept the shared staging resident token or a unit number as proof of identity.
- if(url.pathname==='/api/my-requests'&&req.method==='GET'){
+ if((url.pathname==='/api/my-requests'&&req.method==='GET')||(url.pathname==='/api/private/requests'&&req.method==='POST')){
   if(!env.INTAKE_DB)return encode({error:'Staging configuration incomplete'},503,headers);
   const h=req.headers.get('authorization')||'';
   if(!h.startsWith('Bearer '))return encode({error:'Unauthorized'},401,headers);
   try{
-   const records=await residentRequests(env.INTAKE_DB,h.slice(7));
+   const session=h.slice(7);
+   if(req.method==='POST'){
+    const email=await authenticatedEmail(env.INTAKE_DB,session);
+    return email?submit(req,env,headers,email):encode({error:'Unauthorized'},401,headers);
+   }
+   const records=await residentRequests(env.INTAKE_DB,session);
    return records===null?encode({error:'Unauthorized'},401,headers):encode({ok:true,requests:records},200,headers);
   }catch(e){console.error('Isolated private request lookup error',e);return encode({error:'Private access unavailable'},503,headers)}
  }
