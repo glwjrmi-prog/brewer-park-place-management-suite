@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Brewer Park Place | Maintenance Center Demo v2</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f1f5f2;color:#193a2b}*{box-sizing:border-box}body{margin:0}header{background:#173f2e;color:#fff;padding:24px max(18px,calc((100vw - 1050px)/2))}header p{margin:0;opacity:.85}h1{margin:6px 0;font-size:clamp(1.45rem,4vw,2rem)}h2{font-size:1.3rem;margin:0 0 12px}
+main{max-width:1050px;margin:22px auto;padding:0 16px}.banner{border:1px solid #dbbc6d;background:#fff8e8;border-radius:10px;padding:13px 16px;font-size:.9rem;margin-bottom:18px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}button{background:white;border:1px solid #b3c7b9;color:#173d2c;border-radius:9px;padding:10px 15px;font:inherit;font-weight:600;cursor:pointer}
+button.active,button.primary{background:#205a40;border-color:#205a40;color:white}button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #78a88b;outline-offset:1px}
+.panel{background:white;border:1px solid #dce6df;border-radius:14px;padding:22px;margin:12px 0;box-shadow:0 7px 22px #183a2512}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}label{display:block;font-weight:650;margin-bottom:6px}input,select,textarea{width:100%;padding:10px;font:inherit;border:1px solid #acbfb4;border-radius:8px}textarea{min-height:108px}
+.field{margin-bottom:16px}.muted{color:#56695d;font-size:.92rem}.badge{display:inline-block;background:#e6efe9;color:#27583c;padding:4px 9px;border-radius:999px;font-size:.79rem}
+.warning{background:#fff3de;border-left:4px solid #b17a1c;padding:12px;margin:13px 0;border-radius:4px}.ticket{border:1px solid #dce6df;border-radius:10px;padding:15px;margin-top:13px}.ticket h3{margin:0 0 7px;font-size:1.06rem}.ticket p{margin:7px 0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.history{padding-left:20px;color:#56695d}.empty{padding:25px;text-align:center;color:#596b61;background:#f7faf8;border-radius:9px}
+[hidden]{display:none!important}@media(max-width:620px){.grid{grid-template-columns:1fr}.panel{padding:16px}}
+</style></head><body><header><p>BREWER PARK PLACE · DEVELOPMENT PREVIEW</p><h1>Maintenance Request Center</h1><p>One place to report, review, and track maintenance issues</p></header>
+<main><div class="banner"><strong>Private demonstration, not a live website.</strong> Use invented unit details. Nothing is sent, stored, or connected to the Management Suite. All demo information disappears on refresh.</div>
+<nav class="tabs" aria-label="Demo pages"><button class="active" data-tab="report">Report a concern</button><button data-tab="status">My requests</button><button data-tab="board">Board review</button></nav>
+<section class="panel" data-panel="report"><h2>Submit a maintenance request</h2><p class="muted">Routine and non-emergency items should be submitted here rather than directly to a board member. This demo is not monitored; use the association's established emergency procedure for immediate hazards or active damage.</p>
+<form id="requestForm">
+<div class="grid"><div class="field"><label for="unit">Unit / property location</label><input id="unit" maxlength="80" placeholder="e.g., Building A, Unit 12" required></div>
+<div class="field"><label for="area">Area affected</label><select id="area"><option>Exterior of unit</option><option>Common area / grounds</option><option>Interior of unit</option></select></div></div>
+<div class="grid"><div class="field"><label for="category">Maintenance category</label><select id="category"><option>Exterior trim / paint</option><option>Siding</option><option>Roof / gutters</option><option>Doors / windows</option><option>Landscaping / grounds</option><option>Drainage / water</option><option>Sidewalk / pavement</option><option>Other</option></select></div>
+<div class="field"><label for="escalation">Safety issue or worsening condition?</label><select id="escalation"><option value="no">No</option><option value="yes">Yes</option></select></div></div>
+<div class="field"><label for="description">Please describe the issue and its exact location</label><textarea id="description" maxlength="2000" required placeholder="Describe what you have noticed and where..."></textarea></div>
+<div class="warning"><strong>Before sending:</strong> If this was previously reported, check My Requests and add an update instead. Repeated submissions do not change maintenance priority.</div>
+<button class="primary" type="submit">Submit sample request</button></form>
+<p id="receipt" role="status" aria-live="polite"></p></section>
+<section class="panel" data-panel="status" hidden><h2>My requests <span id="mineCount" class="badge">0</span></h2><p class="muted">In the finished website, residents will see only requests for their authorized unit. This demonstration has no real login and shows requests entered in this browser tab.</p><div id="mine"></div></section>
+<section class="panel" data-panel="board" hidden><div class="row"><h2>Board maintenance queue</h2><span id="boardCount" class="badge">0 awaiting review</span></div><p class="muted">The board sees requests and private evaluation notes. AI analysis is not enabled in this prototype; no actual legal determination or document citations are produced. A board member must approve any final classification.</p><div id="boardList"></div></section>
+<section class="panel"><h2>How it will work</h2><p class="muted">Submitted → Board reviews governing documents and priority → Board approves a determination → Resident sees approved status → HOA work is scheduled, deferred, or completed. The live version will have secure logins, appropriate photos, notifications, and automatic authorized work-order entry.</p></section>
+</main><script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),requests=[],esc=s=>String(s||'').trim(),make=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n;};let sequence=1;
+function switchTab(tab){document.querySelectorAll('[data-panel]').forEach(e=>e.hidden=e.dataset.panel!==tab);document.querySelectorAll('[data-tab]').forEach(e=>{const on=e.dataset.tab===tab;e.classList.toggle('active',on);e.setAttribute('aria-current',on?'page':'false')});if(tab==='status')renderMine();if(tab==='board')renderBoard();}
+document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+function event(r,msg){r.events.push(msg)}
+function findSame(unit,category,description){return requests.find(r=>r.unit.toLowerCase()===unit.toLowerCase()&&r.category===category&&r.description.toLowerCase()===description.toLowerCase()&&r.status!=='Completed')}
+$('requestForm').addEventListener('submit',e=>{e.preventDefault();const unit=esc($('unit').value),description=esc($('description').value),category=$('category').value;if(!unit||!description)return;
+const duplicate=findSame(unit,category,description);if(duplicate){$('receipt').textContent='This looks identical to '+duplicate.id+'. Please check My Requests and add an update instead. No duplicate ticket was created.';return;}
+const r={id:'DEMO-'+String(sequence++).padStart(4,'0'),unit,area:$('area').value,category,description,escalation:$('escalation').value==='yes',status:'Pending board review',decision:null,priority:null,notes:'',updates:[],events:[]};event(r,'Request received and added to board review queue');requests.push(r);$('requestForm').reset();$('receipt').textContent='Request '+r.id+' received. You can check its status under My Requests. No real request has been submitted.';});
+function renderMine(){const el=$('mine');el.replaceChildren();$('mineCount').textContent=requests.length+' submitted';if(!requests.length){el.append(make('div','No sample requests yet.','empty'));return;}
+requests.slice().reverse().forEach(r=>{const card=make('article','','ticket');const top=make('div','','row');top.append(make('h3',r.id+' · '+r.category),make('span',r.status,'badge'));card.append(top,make('p',r.unit+' — '+r.area),make('p',r.description));
+if(r.decision){card.append(make('p','Board determination: '+r.decision),make('p','Priority: '+r.priority))}
+const h=make('ol','','history');r.events.forEach(s=>h.append(make('li',s)));card.append(h);
+const label=make('label','Add information or report a changed condition');const area=document.createElement('textarea');area.placeholder='What changed? This updates the existing request rather than creating another.';area.maxLength=1000;const button=make('button','Add update');button.type='button';button.addEventListener('click',()=>{const t=esc(area.value);if(!t)return;r.updates.push(t);r.status=r.status==='Completed'?'Follow-up requires board review':r.status;event(r,'Resident update submitted for board review');renderMine()});card.append(label,area,button);el.append(card)})}
+function renderBoard(){const el=$('boardList');el.replaceChildren();$('boardCount').textContent=requests.filter(r=>r.status==='Pending board review'||r.status==='Follow-up requires board review').length+' awaiting review';if(!requests.length){el.append(make('div','No sample requests yet.','empty'));return;}
+requests.slice().reverse().forEach(r=>{const card=make('article','','ticket');const top=make('div','','row');top.append(make('h3',r.id+' · '+r.unit),make('span',r.status,'badge'));card.append(top,make('p',r.category+' — '+r.area),make('p',r.description));if(r.escalation)card.append(make('p','Resident flagged possible safety/worsening condition — prompt human evaluation required','warning'));
+for(const u of r.updates)card.append(make('p','Resident update: '+u));
+if(r.status==='Pending board review'||r.status==='Follow-up requires board review'){
+const l1=make('label','Responsibility (human assessment only)');const s=document.createElement('select');['Requires more information','Likely association responsibility','Likely owner responsibility','Shared / disputed responsibility'].forEach(x=>{const o=make('option',x);o.value=x;s.append(o)});
+const l2=make('label','Priority');const p=document.createElement('select');['Routine','High','Emergency'].forEach(x=>{const o=make('option',x);o.value=x;p.append(o)});
+const l3=make('label','Review notes and governing-document reference');const n=document.createElement('textarea');n.placeholder='Explain decision, source and applicable section. Do not invent document citations.';
+const a=make('div','','actions'),btn=make('button','Approve board review','primary');btn.type='button';btn.addEventListener('click',()=>{if(s.value==='Requires more information'||!esc(n.value)){alert('Select a responsibility and include an explanation or document reference before approving.');return}r.decision=s.value;r.priority=p.value;r.notes=esc(n.value);r.status='Board reviewed';event(r,'Board approved a determination and assigned priority');renderBoard()});a.append(btn);card.append(l1,s,l2,p,l3,n,a);
+}else{card.append(make('p','Approved: '+r.decision+' / '+r.priority));const actions=make('div','','actions');['Scheduled','Deferred','Completed'].forEach(status=>{const b=make('button',status);b.type='button';b.addEventListener('click',()=>{r.status=status;event(r,'Status updated to '+status);renderBoard()});actions.append(b)});card.append(actions)}
+el.append(card)})}
+})();
+</script></body></html>
