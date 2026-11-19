@@ -9,3 +9,9 @@ compatibility_date = "2026-11-19"
 # [vars]
 # ALLOWED_STAGING_ORIGIN = "https://<private staging host>"
 # Secrets (never commit values): RESIDENT_STAGING_TOKEN, BOARD_STAGING_TOKEN
+
+# Safe default: no outbound Policy Advisor calls until staging is privately configured.
+# POLICY_ADVISOR_ENABLED = "false"
+# Changing this to "true" permits explicitly requested board-only, sanitized
+# area/category questions to existing BPP Policy Advisor. Never publish publicly
+# while shared board/resident test credentials are used.
