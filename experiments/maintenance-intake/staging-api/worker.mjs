@@ -49,9 +49,15 @@ async function review(req,env,id,headers){
  if(!existing)return encode({error:'Request not found'},404,headers);
  if(existing.status!=='pending_board_review'||existing.version!==body.version)return encode({error:'Review conflict: refresh before retrying',code:'VERSION_CONFLICT'},409,headers);
  const now=new Date().toISOString();
- const result=await env.INTAKE_DB.prepare("UPDATE intake_requests SET status='reviewed', responsibility=?,priority=?,review_notes=?,board_actor=?,reviewed_at=?,version=version+1 WHERE id=? AND version=? AND status='pending_board_review'").bind(body.responsibility,body.priority,body.notes.trim(),body.actor.trim(),now,id,body.version).run();
- if(Number(result.meta?.changes||0)!==1)return encode({error:'Review conflict',code:'VERSION_CONFLICT'},409,headers);
- await env.INTAKE_DB.prepare('INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) VALUES(?,?,?,?,?,?)').bind(id,'board_reviewed','board',body.actor.trim(),now,JSON.stringify({responsibility:body.responsibility,priority:body.priority,notes:body.notes.trim()})).run();
+ // D1 batch provides one transaction for status change and its audit event.
+ // The event SELECT only inserts when this version transition actually succeeded.
+ const statements=[
+  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='reviewed', responsibility=?,priority=?,review_notes=?,board_actor=?,reviewed_at=?,version=version+1 WHERE id=? AND version=? AND status='pending_board_review'").bind(body.responsibility,body.priority,body.notes.trim(),body.actor.trim(),now,id,body.version),
+  env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'board_reviewed','board',?, ?, ? FROM intake_requests WHERE id=? AND version=? AND status='reviewed' AND board_actor=? AND reviewed_at=?").bind(body.actor.trim(),now,JSON.stringify({responsibility:body.responsibility,priority:body.priority,notes:body.notes.trim()}),id,body.version+1,body.actor.trim(),now)
+ ];
+ const result=await env.INTAKE_DB.batch(statements);
+ if(Number(result?.[0]?.meta?.changes||0)!==1||Number(result?.[1]?.meta?.changes||0)!==1)
+  return encode({error:'Review conflict: refresh before retrying',code:'VERSION_CONFLICT'},409,headers);
  return encode({ok:true,id,status:'reviewed',version:body.version+1},200,headers);
 }
 export default {async fetch(req,env){
