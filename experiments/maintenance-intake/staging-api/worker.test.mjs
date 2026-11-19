@@ -126,3 +126,31 @@ test('private request route requires a verified email session, not a unit or sha
  const other=await as(second.privateSession);
  assert.equal(other.status,200);assert.equal(other.body.requests[0].id,'BPP-STG-b');
 });
+
+test('verified resident submission appears only in matching private inbox',async()=>{
+ const t=sandbox();
+ const a=await createEmailChallenge(t.database,'a@example.com');
+ const b=await createEmailChallenge(t.database,'b@example.com');
+ const first=await consumeEmailChallenge(t.database,a.privateToken);
+ const second=await consumeEmailChallenge(t.database,b.privateToken);
+ async function request(path,session,method='GET',payload=null,key='shared-testing-key'){
+  const headers={authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN};
+  if(method==='POST'){headers['content-type']='application/json';headers['idempotency-key']=key}
+  const req=new Request('https://staging.test'+path,{method,headers,body:payload===null?undefined:JSON.stringify(payload)});
+  const r=await worker.fetch(req,t.env);return {status:r.status,body:await r.json()};
+ }
+ const submitted=await request('/api/private/requests',first.privateSession,'POST',sample(),'resident-one-key');
+ assert.equal(submitted.status,201);
+ const stored=t.db.prepare('SELECT submitter_email FROM intake_requests WHERE id=?').get(submitted.body.id);
+ assert.equal(stored.submitter_email,'a@example.com');
+ const mine=await request('/api/my-requests',first.privateSession);
+ assert.equal(mine.status,200);assert.equal(mine.body.requests.length,1);
+ const others=await request('/api/my-requests',second.privateSession);
+ assert.equal(others.status,200);assert.equal(others.body.requests.length,0);
+ const identicalRetry=await request('/api/private/requests',first.privateSession,'POST',sample(),'resident-one-key');
+ assert.equal(identicalRetry.status,200);assert.equal(identicalRetry.body.duplicate,true);
+ const crossAccountRetry=await request('/api/private/requests',second.privateSession,'POST',sample(),'resident-one-key');
+ assert.equal(crossAccountRetry.status,409);
+ assert.equal((await request('/api/private/requests','a'.repeat(64),'POST',sample(),'bad')).status,401);
+ assert.equal(t.count('intake_requests'),1);
+});
