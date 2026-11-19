@@ -42,3 +42,14 @@ CREATE TABLE IF NOT EXISTS urgent_alert_outbox (
   UNIQUE(request_id,recipient_key)
 );
 CREATE INDEX IF NOT EXISTS idx_urgent_outbox_request ON urgent_alert_outbox(request_id,id);
+
+-- Staging-only draft work orders, never a Suite v9 work order or a dispatch.
+-- Unique intake ID prevents multiple board-side draft creation.
+CREATE TABLE IF NOT EXISTS staged_work_order_drafts (
+  id TEXT PRIMARY KEY,
+  intake_request_id TEXT NOT NULL UNIQUE REFERENCES intake_requests(id),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status='draft')
+);
+CREATE INDEX IF NOT EXISTS idx_work_order_draft_created ON staged_work_order_drafts(created_at DESC);
