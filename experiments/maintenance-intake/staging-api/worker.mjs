@@ -1,4 +1,5 @@
 // BPP maintenance intake — ISOLATED STAGING CANDIDATE. NO production integration.
+import {residentRequests} from './resident-access.mjs';
 // Bind INTAKE_DB to a NEW, dedicated D1 database; do not bind Suite v9 DB.
 // RESIDENT_STAGING_TOKEN and BOARD_STAGING_TOKEN are distinct temporary test credentials.
 // Not for public deployment: live release requires existing BPP per-user PIN sessions,
@@ -98,6 +99,17 @@ export default {async fetch(req,env){
  const origin=req.headers.get('origin');
  if(origin&&origin!==String(env.ALLOWED_STAGING_ORIGIN||''))return encode({error:'Origin denied'},403,headers);
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
+ // PRIVATE READ: only a separately verified, short-lived resident session may list requests.
+ // Do not accept the shared staging resident token or a unit number as proof of identity.
+ if(url.pathname==='/api/my-requests'&&req.method==='GET'){
+  if(!env.INTAKE_DB)return encode({error:'Staging configuration incomplete'},503,headers);
+  const h=req.headers.get('authorization')||'';
+  if(!h.startsWith('Bearer '))return encode({error:'Unauthorized'},401,headers);
+  try{
+   const records=await residentRequests(env.INTAKE_DB,h.slice(7));
+   return records===null?encode({error:'Unauthorized'},401,headers):encode({ok:true,requests:records},200,headers);
+  }catch(e){console.error('Isolated private request lookup error',e);return encode({error:'Private access unavailable'},503,headers)}
+ }
  if(!env.INTAKE_DB||!env.BOARD_STAGING_TOKEN||!env.RESIDENT_STAGING_TOKEN||env.BOARD_STAGING_TOKEN===env.RESIDENT_STAGING_TOKEN)return encode({error:'Staging configuration incomplete'},503,headers);
  const role=roleOf(req,env);if(!role)return encode({error:'Unauthorized'},401,headers);
  try{
