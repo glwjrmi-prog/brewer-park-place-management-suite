@@ -68,3 +68,9 @@ The isolated `staging-api/schema.sql` now includes an urgent acknowledgement own
 The new board-only `POST /api/requests/:id/acknowledge` endpoint uses a version-checked, compare-and-swap claim and records an audit event in the same transaction. It rejects nonurgent requests, already-acknowledged items, and stale versions. `GET /api/requests` returns acknowledgement status for the *staging board*, not a public resident endpoint. Source syntax was checked, but **database and end-to-end tests are still pending**.
 
 Do not treat staging token roles, client-supplied reviewer names, or temporary recipient configuration as production authentication. Before any public website connection, replace them with server-verified existing BPP identity and dynamically fetched active board membership. No delivery, acknowledgement SLA, or emergency dispatch guarantee is in place.
+
+
+## Regression test suite (added 2026-11-19)
+`staging-api/worker.test.mjs` uses Node's in-memory SQLite adapter and synthetic input to test role restrictions, duplicate submit, altered-payload conflict, urgency outbox fan-out, first-board-member acknowledgement, stale duplicate claim, board approval, missing configuration and untrusted-origin rejection. `.github/workflows/maintenance-intake-tests.yml` is a **read-only CI check** that only runs these tests and the existing pure work-order tests. It has no deployment steps and has no permissions to alter production.
+Run manually: `node --experimental-sqlite --test experiments/maintenance-intake/staging-api/worker.test.mjs experiments/maintenance-intake/work-order-adapter.test.mjs`.
+**Test execution not yet confirmed**: creating test code and CI configuration is not evidence of successful test results. GitHub may not run it until Actions is enabled or triggered.
