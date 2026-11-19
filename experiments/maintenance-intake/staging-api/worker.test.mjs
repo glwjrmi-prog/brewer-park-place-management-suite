@@ -154,3 +154,38 @@ test('verified resident submission appears only in matching private inbox',async
  assert.equal((await request('/api/private/requests','a'.repeat(64),'POST',sample(),'bad')).status,401);
  assert.equal(t.count('intake_requests'),1);
 });
+
+test('staging draft is board-only, requires HOA/shared approval and is unique',async()=>{
+ const t=sandbox();
+ const a=await t.send('/api/requests','resident','POST',sample(), 'draft-case-one');
+ const id=a.body.id,path='/api/requests/'+id+'/work-order-draft';
+ assert.equal((await t.send(path,'resident','POST',{version:1,actor:'resident'})).status,403);
+ assert.equal((await t.send(path,'board','POST',{version:1,actor:'Test board'})).status,422);
+ assert.equal((await t.send('/api/work-order-drafts','resident')).status,403);
+ const review={version:1,actor:'Test board',notes:'Board authorized draft only',responsibility:'association',priority:'routine'};
+ assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',review)).status,200);
+ assert.equal((await t.send(path,'board','POST',{version:1,actor:'Test board'})).status,409);
+ const created=await t.send(path,'board','POST',{version:2,actor:'Test board'});
+ assert.equal(created.status,201);assert.equal(created.body.mode,'isolated_staging_only');
+ assert.equal(t.count('staged_work_order_drafts'),1);
+ assert.equal((await t.send(path,'board','POST',{version:2,actor:'Different board member'})).status,409);
+ assert.equal(t.count('staged_work_order_drafts'),1);
+ const listed=await t.send('/api/work-order-drafts','board');
+ assert.equal(listed.status,200);assert.equal(listed.body.drafts.length,1);
+ assert.equal(listed.body.drafts[0].intakeRequestId,id);
+ assert.equal(t.count('intake_events'),3);
+});
+test('owner-only reviewed intake cannot create HOA draft',async()=>{
+ const t=sandbox();
+ const a=await t.send('/api/requests','resident','POST',sample(), 'draft-case-two'),id=a.body.id;
+ assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',{version:1,actor:'Test board',notes:'Owner item',responsibility:'owner',priority:'routine'})).status,200);
+ const r=await t.send('/api/requests/'+id+'/work-order-draft','board','POST',{version:2,actor:'Test board'});
+ assert.equal(r.status,422);assert.equal(t.count('staged_work_order_drafts'),0);
+});
+test('shared-responsibility board-approved intake may create isolated draft',async()=>{
+ const t=sandbox();
+ const a=await t.send('/api/requests','resident','POST',sample(), 'draft-case-three'),id=a.body.id;
+ assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',{version:1,actor:'Test board',notes:'Shared matter',responsibility:'shared_or_disputed',priority:'high'})).status,200);
+ const r=await t.send('/api/requests/'+id+'/work-order-draft','board','POST',{version:2,actor:'Test board'});
+ assert.equal(r.status,201);assert.equal(t.count('staged_work_order_drafts'),1);
+});
