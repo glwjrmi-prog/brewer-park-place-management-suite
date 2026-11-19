@@ -6,12 +6,14 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { webcrypto } from 'node:crypto';
 import worker from './worker.mjs';
+import {createEmailChallenge,consumeEmailChallenge} from './resident-access.mjs';
 
 if (!globalThis.crypto) globalThis.crypto=webcrypto;
 
 function sandbox(){
  const db=new DatabaseSync(':memory:');
  db.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
+ db.exec(readFileSync(new URL('./resident-email-schema.sql',import.meta.url),'utf8'));
  const wrap=(sql,args=[])=>({
    bind(...values){return wrap(sql,values)},
    async first(){return db.prepare(sql).get(...args)||null},
@@ -40,7 +42,7 @@ function sandbox(){
    return {status:response.status,body:await response.json()};
  };
  const count=(table)=>Number(db.prepare('SELECT count(*) AS n FROM '+table).get().n);
- return {env,send,count,db};
+ return {env,send,count,db,database};
 }
 const sample=(escalation=false)=>({unit:'Sample Unit 12',area:'Exterior of unit',category:'Siding',description:'Loose trim - synthetic only',escalation});
 test('resident submission, board-only list and duplicate retry',async()=>{
@@ -97,4 +99,30 @@ test('untrusted origin denied',async()=>{
  const req=new Request('https://staging.test/api/requests',{method:'GET',headers:{origin:'https://untrusted.example',authorization:'Bearer board-test-secret'}});
  const response=await worker.fetch(req,t.env);
  assert.equal(response.status,403);
+});
+
+test('private request route requires a verified email session, not a unit or shared token',async()=>{
+ const t=sandbox();
+ const insert=t.db.prepare("INSERT INTO intake_requests(id,submission_key,unit,area,category,description,status,created_at,submitter_email,review_notes) VALUES(?,?,?,?,?,?,?,?,?,?)");
+ insert.run('BPP-STG-a','key-first','Unit 12','Exterior of unit','Siding','First resident concern','reviewed','2026-11-19T10:00:00Z','first@example.com','Board private discussion');
+ insert.run('BPP-STG-b','key-second','Unit 12','Exterior of unit','Siding','Second resident concern','reviewed','2026-11-19T10:01:00Z','second@example.com','Confidential review');
+ const one=await createEmailChallenge(t.database,'first@example.com');
+ const two=await createEmailChallenge(t.database,'second@example.com');
+ const first=await consumeEmailChallenge(t.database,one.privateToken);
+ const second=await consumeEmailChallenge(t.database,two.privateToken);
+ async function as(token){
+  const request=new Request('https://staging.test/api/my-requests',{headers:{authorization:'Bearer '+token,origin:t.env.ALLOWED_STAGING_ORIGIN}});
+  const response=await worker.fetch(request,t.env);
+  return {status:response.status,body:await response.json()};
+ }
+ assert.equal((await t.send('/api/my-requests','resident')).status,401);
+ assert.equal((await t.send('/api/my-requests','board')).status,401);
+ assert.equal((await as('a'.repeat(64))).status,401);
+ const mine=await as(first.privateSession);
+ assert.equal(mine.status,200);assert.equal(mine.body.requests.length,1);
+ assert.equal(mine.body.requests[0].id,'BPP-STG-a');
+ assert.equal(JSON.stringify(mine.body).includes('Board private discussion'),false);
+ assert.equal(JSON.stringify(mine.body).includes('Second resident concern'),false);
+ const other=await as(second.privateSession);
+ assert.equal(other.status,200);assert.equal(other.body.requests[0].id,'BPP-STG-b');
 });
