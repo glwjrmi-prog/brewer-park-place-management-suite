@@ -42,3 +42,17 @@ Open `index.html` locally; enter invented unit details only. Use the Board revie
 
 ## Work-order mapping preview (not connected)
 The pure `work-order-adapter.mjs` implements a **side-effect-free** conversion from an explicitly board-reviewed, association/shared-responsibility sample request to the existing Management Suite v9 work-order field names. It uses the highest current work-order sequence rather than array length, refuses unreviewed or owner-only issues, rejects duplicate linked requests, and leaves the supplied state untouched. `work-order-adapter.test.mjs` contains Node regression tests. **No actual work order is written by this adapter**. Production integration requires fresh authoritative state and a revision-checked backend save, never a browser-side copy.
+
+
+## Resident / board walkthrough v2
+`demo-v2.html` is the preferred visual walkthrough for the **first owner usability test**, still completely offline and synthetic:
+- Resident submits a sample request and receives a tracking number.
+- Identical repeat submissions from the same unit/category/description are blocked and redirected to the existing ticket.
+- Resident can review status and add new information to the same request.
+- Board can see escalation flags, inspect resident updates, and require a documented review reason before approving responsibility.
+- After approval, board can mark scheduled, deferred or completed; resident can see the approved decision and lifecycle status.
+- When a resident updates an already reviewed request it returns to the board queue.
+- No real resident authentication, AI, citations or Suite work-order writes are performed. Board tab is a **simulation**, not a secure role boundary.
+
+## Current verification
+The pure work-order adapter has been exercised with synthetic input for sequence generation, unchanged original state, version propagation, and rejection of unreviewed/owner-only requests. The new UI is committed but browser usability testing is pending. The isolated Worker/D1 schema is written but not deployed or integration-tested. These are not production acceptance test results.
