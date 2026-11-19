@@ -46,7 +46,7 @@ async function submit(req,env,headers,ownerEmail=null){
   await env.INTAKE_DB.batch(statements);
  }catch(e){
   // Racing same-key submissions: return existing receipt, never make duplicate work orders.
-  const row=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation FROM intake_requests WHERE submission_key=?').bind(key).first();
+  const row=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation,submitter_email FROM intake_requests WHERE submission_key=?').bind(key).first();
   if(row){const same=row.submitter_email===ownerEmail&&row.unit===body.unit.trim()&&row.area===body.area&&row.category===body.category&&row.description===body.description.trim()&&!!row.escalation===body.escalation;return same?encode({ok:true,id:row.id,status:'pending_board_review',duplicate:true},200,headers):encode({error:'Idempotency key conflict'},409,headers)}
   throw e;
  }
