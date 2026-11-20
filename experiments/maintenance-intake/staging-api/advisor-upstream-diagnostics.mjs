@@ -30,7 +30,7 @@ export async function probeOpenAI({
    model:env.ADVISOR_DIAGNOSTIC_MODEL||'gpt-5',
    input:'Reply exactly with OK.',
    store:false,
-   max_output_tokens:64
+   max_output_tokens:256
  };
  if(mode==='web')body.tools=[{type:'web_search'}];
  try{
@@ -46,7 +46,8 @@ export async function probeOpenAI({
      const code=parseCode(data);
      return {step:stageLabel[mode],ok:false,kind:classify(response.status,code),httpStatus:response.status,providerCode:code,elapsedMs:clock()-started};
    }
-   return {step:stageLabel[mode],ok:true,kind:'PROVIDER_ACCEPTED',httpStatus:response.status,elapsedMs:clock()-started,outputReturned:Array.isArray(data?.output)};
+   const textReturned=Array.isArray(data?.output)&&data.output.some(item=>item?.type==='message'&&Array.isArray(item.content)&&item.content.some(part=>part?.type==='output_text'&&typeof part.text==='string'&&part.text.trim()));
+   return {step:stageLabel[mode],ok:!!textReturned,kind:textReturned?'MODEL_ANSWERED':'NO_TEXT_RESPONSE',httpStatus:response.status,elapsedMs:clock()-started,providerStatus:typeof data?.status==='string'?data.status:null};
  }catch(e){
    return {step:stageLabel[mode],ok:false,kind:controller.signal.aborted?'TIMEOUT':'NETWORK_ERROR',elapsedMs:clock()-started};
  }finally{clearTimeout(timer)}
