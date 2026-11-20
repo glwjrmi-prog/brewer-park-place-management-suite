@@ -18,11 +18,29 @@ export function advisorQuestion(area,category){
   'This is preliminary, board-internal advice and not an HOA determination.'
  ].join('\n');
 }
-export async function askAdvisor({area,category,fetcher=fetch,signal}){
+export class AdvisorUnavailableError extends Error {
+ constructor(code){super('Policy Advisor unavailable; board must consult the governing documents directly');this.name='AdvisorUnavailableError';this.code=code}
+}
+export async function askAdvisor({area,category,fetcher=fetch,signal,timeoutMs=10000}){
  const question=advisorQuestion(area,category);
- const response=await fetcher(ADVISOR_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question}),signal});
- if(!response?.ok)throw new Error('Policy Advisor request failed');
- const data=await response.json();
- if(typeof data?.answer!=='string'||!data.answer.trim()||data.answer.length>20000)throw new Error('Policy Advisor returned an invalid answer');
- return {answer:data.answer.trim(),source:'BPP Policy Advisor — unverified board-internal suggestion',question};
+ // Time-bound both the HTTP handshake AND JSON reading, and keep external errors private.
+ // No automatic retries: a slow upstream call must not trigger multiple AI requests.
+ const controller=new AbortController();
+ const abort=()=>controller.abort();
+ if(signal?.aborted)throw new AdvisorUnavailableError('ABORTED');
+ signal?.addEventListener('abort',abort,{once:true});
+ const timer=setTimeout(abort,timeoutMs);
+ try{
+  const response=await fetcher(ADVISOR_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question}),signal:controller.signal});
+  if(!response?.ok)throw new AdvisorUnavailableError('UPSTREAM_STATUS');
+  const data=await response.json();
+  if(typeof data?.answer!=='string'||!data.answer.trim()||data.answer.length>20000)throw new AdvisorUnavailableError('INVALID_ANSWER');
+  return {answer:data.answer.trim(),source:'BPP Policy Advisor — unverified board-internal suggestion',question};
+ }catch(e){
+  if(e instanceof AdvisorUnavailableError)throw e;
+  throw new AdvisorUnavailableError(controller.signal.aborted?'TIMEOUT_OR_ABORT':'NETWORK_FAILURE');
+ }finally{
+  clearTimeout(timer);
+  signal?.removeEventListener('abort',abort);
+ }
 }
