@@ -9,7 +9,7 @@ test('staging probe sends only synthetic prompt; never leaks key or answer',asyn
   const payload=JSON.parse(opts.body);
   assert.equal(payload.input,'Reply exactly with OK.');
   assert.equal(payload.store,false);
-  return {ok:true,status:200,json:async()=>({output:[{type:'message',content:[{text:'Private model output should not appear'}]}]})};
+  return {ok:true,status:200,json:async()=>({output:[{type:'message',content:[{type:'output_text',text:'Private model output should not appear'}]}]})};
  }});
  assert.equal(a.basic.ok,true);assert.equal(a.web.ok,true);
  assert.equal(a.inference,'BASIC_AND_WEB_TOOL_AVAILABLE');
@@ -29,11 +29,16 @@ test('web tool failure distinguishable from successful basic model',async()=>{
  let count=0;
  const r=await diagnoseProvider(env,{fetcher:async()=>{
   count++;
-  return count===1?{ok:true,status:200,json:async()=>({output:[]})}:{ok:false,status:500,json:async()=>({error:{code:'other',message:'secret'}})};
+  return count===1?{ok:true,status:200,json:async()=>({output:[{type:'message',content:[{type:'output_text',text:'OK'}]}]})}:{ok:false,status:500,json:async()=>({error:{code:'other',message:'secret'}})};
  }});
  assert.equal(r.basic.ok,true);assert.equal(r.web.ok,false);assert.equal(r.web.kind,'PROVIDER_ERROR');assert.equal(r.inference,'WEB_TOOL_OR_LONG_RUNNING_REQUEST_PROBLEM');
 });
 test('abort timeout returns bounded safe diagnostic',async()=>{
  const r=await probeOpenAI({env,timeoutMs:110,fetcher:async(_url,opts)=>new Promise((_resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(Error('secret exception')),{once:true}))});
  assert.equal(r.kind,'TIMEOUT');assert.equal(JSON.stringify(r).includes('secret'),false);
+});
+
+test('empty or reasoning-only provider output is not a successful answer',async()=>{
+ const r=await diagnoseProvider(env,{fetcher:async()=>({ok:true,status:200,json:async()=>({status:'incomplete',output:[{type:'reasoning'}]})})});
+ assert.equal(r.basic.ok,false);assert.equal(r.basic.kind,'NO_TEXT_RESPONSE');assert.equal(r.web,null);
 });
