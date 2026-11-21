@@ -1,0 +1,21 @@
+name: Policy Advisor Documented Route Diagnostic
+on:
+  push:
+    branches:
+      - feature/maintenance-intake-prototype-2026-11-19
+    paths:
+      - '.github/workflows/maintenance-advisor-route-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  route-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Check documented POST /ask route without personal data
+        run: node experiments/maintenance-intake/staging-api/policy-advisor-route-check.mjs

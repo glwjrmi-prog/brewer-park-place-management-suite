@@ -1,0 +1,18 @@
+import {nextWorkOrderId,prepareApprovedWorkOrder} from './work-order-adapter.mjs';
+import assert from 'node:assert/strict';
+const base=()=>({maintenance:[{id:'WO-2026-001',issue:'Prior repair'},{id:'WO-2026-008',issue:'Other'},{id:'WO-2025-099'}],projects:[{project:'Unchanged'}],_sync:{revision:31}});
+const approved=()=>({id:'BPP-STG-12345678-1234-4234-9234-123456789abc',status:'reviewed',boardActor:'Staging reviewer',reviewedAt:'2026-11-19T15:00:00Z',responsibility:'association',priority:'routine',category:'Siding',unit:'Sample unit',description:'Loose trim panel'});
+const now=new Date('2026-11-19T12:00:00Z');
+assert.equal(nextWorkOrderId(base().maintenance,now),'WO-2026-009');
+const original=base(),res=prepareApprovedWorkOrder(original,approved(),{now});
+assert.equal(res.workOrder.id,'WO-2026-009');assert.equal(res.workOrder.priority,'Routine');
+assert.equal(res.requiredBaseRevision,31);assert.equal(res.mode,'preview_only');
+assert.equal(original.maintenance.length,3);assert.equal(original.projects.length,1);
+assert.equal(res.nextState.maintenance.length,4);assert.equal(res.nextState.projects.length,1);
+assert.throws(()=>prepareApprovedWorkOrder(original,{...approved(),status:'pending_board_review'},{now}),/Board-reviewed/);
+assert.throws(()=>prepareApprovedWorkOrder(original,{...approved(),responsibility:'owner'},{now}),/Owner-only/);
+assert.throws(()=>prepareApprovedWorkOrder(original,{...approved(),responsibility:'requires_more_information'},{now}),/Owner-only/);
+assert.throws(()=>prepareApprovedWorkOrder(original,{...approved(),priority:'critical'},{now}),/priority/);
+const linked=base();linked.maintenance.push({id:'WO-2026-009',intakeRequestId:approved().id});
+assert.throws(()=>prepareApprovedWorkOrder(linked,approved(),{now}),/already linked/);
+console.log('PASS: ID sequence, mapping, original-state integrity, board approval gate, owner-only gate, validation, deduplication');
