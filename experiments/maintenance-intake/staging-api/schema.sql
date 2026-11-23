@@ -65,3 +65,14 @@ CREATE TABLE IF NOT EXISTS intake_policy_advice (
   requested_at TEXT NOT NULL,
   request_version INTEGER NOT NULL
 );
+
+-- Resident-owned supplemental updates. Board review must be repeated after a new
+-- update to an already reviewed intake; never edit an authoritative Suite work order.
+CREATE TABLE IF NOT EXISTS intake_resident_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id TEXT NOT NULL REFERENCES intake_requests(id),
+  submitter_email TEXT NOT NULL,
+  details TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_intake_resident_updates_request ON intake_resident_updates(request_id,id);
