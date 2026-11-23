@@ -11,7 +11,7 @@ function sandbox(){
  sql.exec(readFileSync(new URL('./gmail-oauth.schema.sql',import.meta.url),'utf8'));
  const make=(q,args=[])=>({bind(...v){return make(q,v)},async first(){return sql.prepare(q).get(...args)||null},
   async run(){const r=sql.prepare(q).run(...args);return {meta:{changes:r.changes}}}});
- const env={INTAKE_DB:{prepare:q=>make(q)},STAGING_INTAKE_ENABLED:'true',STAGING_GMAIL_OAUTH_ENABLED:'true',
+ const env={INTAKE_DB:{prepare:q=>make(q)},STAGING_INTAKE_ENABLED:'false',STAGING_GMAIL_OAUTH_ENABLED:'true',
   STAGING_ADMIN_ORIGIN:origin,GMAIL_CLIENT_ID:'123456789-synthetic.apps.googleusercontent.com',
   GMAIL_CLIENT_SECRET:'synthetic-server-secret-not-real',GMAIL_REDIRECT_URI:origin+'/oauth/gmail/callback'};
  const req=(path,method='GET',h={})=>new Request(origin+path,{method,headers:h});
@@ -76,6 +76,9 @@ test('disabled gate, missing secret vault and unverified admin deny callback wit
   s.env.STAGING_GMAIL_OAUTH_ENABLED='false';
   assert.equal((await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?code=a&state=b'),s.env,s.ok)).status,503);
   s.env.STAGING_GMAIL_OAUTH_ENABLED='true';
+  s.env.STAGING_INTAKE_ENABLED='true';
+  assert.equal((await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?code=a&state=b'),s.env,s.ok)).status,503);
+  s.env.STAGING_INTAKE_ENABLED='false';
   assert.equal((await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?code=a&state=b'),s.env,s.ok)).status,503);
   assert.equal((await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?error=access_denied'),s.env,s.ok)).status,400);
   assert.equal((await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?code=a&state=b'),s.env,
