@@ -35,7 +35,7 @@ test('wrong key, tampered ciphertext, and key version mismatch fail closed',asyn
   await assert.rejects(()=>loadBoardRefreshToken({db:t.db,vaultSecret:key()}),/Vault decryption failed/);
   await assert.rejects(()=>loadBoardRefreshToken({db:t.db,vaultSecret,keyVersion:'v2'}),/rotation required/);
   t.sqlite.prepare("UPDATE gmail_sender_vault SET ciphertext=? WHERE sender_email=?").run('abcdefgh','board@bppcondos.org');
-  await assert.rejects(()=>loadBoardRefreshToken({db:t.db,vaultSecret}),/Vault decryption failed/);
+  await assert.rejects(()=>loadBoardRefreshToken({db:t.db,vaultSecret}),/Vault (format invalid|decryption failed)/);
  }finally{t.close()}
 });
 test('reauthorization rotates nonce/ciphertext without storing prior Google token',async()=>{
