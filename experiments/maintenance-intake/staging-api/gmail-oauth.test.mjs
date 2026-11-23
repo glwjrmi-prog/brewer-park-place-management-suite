@@ -26,7 +26,8 @@ test('admin-only start generates exact registered https redirect, random state a
   const url=new URL(result.authorizationUrl);
   assert.equal(url.origin,'https://accounts.google.com');
   assert.equal(url.pathname,'/o/oauth2/v2/auth');
-  assert.equal(url.searchParams.get('scope'),gmailSendOnlyScope);
+  assert.deepEqual(new Set(url.searchParams.get('scope').split(' ')),new Set([gmailSendOnlyScope,'openid','https://www.googleapis.com/auth/userinfo.email']));
+  assert.match(url.searchParams.get('nonce'),/^[a-zA-Z0-9_-]{43}$/);
   assert.equal(url.searchParams.get('access_type'),'offline');
   assert.equal(url.searchParams.get('code_challenge_method'),'S256');
   assert.equal(url.searchParams.get('redirect_uri'),settings.redirectUri);
@@ -36,6 +37,7 @@ test('admin-only start generates exact registered https redirect, random state a
   const row=s.sqlite.prepare('SELECT * FROM gmail_oauth_handshakes').get();
   assert.equal(row.state_hash.length,64);
   assert.equal(row.admin_session_hash.length,64);
+  assert.equal(row.oidc_nonce,url.searchParams.get('nonce'));
   assert.equal(row.admin_session_hash.includes(settings.adminSession),false);
   assert.notEqual(row.state_hash,url.searchParams.get('state'));
   assert.notEqual(row.pkce_verifier,url.searchParams.get('code_challenge'));
@@ -49,6 +51,13 @@ test('single-use callback exchanges code with PKCE and never accepts replay',asy
   const state=new URL(auth.authorizationUrl).searchParams.get('state');
   let sent=0;
   const fetcher=async(url,opts)=>{
+   if(url==='https://oauth2.googleapis.com/tokeninfo'){
+    assert.equal(opts.method,'POST');
+    return {ok:true,async json(){return {iss:'https://accounts.google.com',aud:settings.clientId,
+     email:'board@bppcondos.org',email_verified:true,hd:'bppcondos.org',
+     nonce:s.sqlite.prepare('SELECT oidc_nonce FROM gmail_oauth_handshakes').get().oidc_nonce,
+     exp:Math.floor(Date.now()/1000)+3600}}};
+   }
    sent++;
    assert.equal(url,'https://oauth2.googleapis.com/token');
    assert.equal(opts.method,'POST');
@@ -58,11 +67,12 @@ test('single-use callback exchanges code with PKCE and never accepts replay',asy
    assert.equal(opts.body.get('redirect_uri'),settings.redirectUri);
    assert.match(opts.body.get('code_verifier'),/^[a-zA-Z0-9_-]{43}$/);
    return {ok:true,async json(){return {access_token:'synthetic-access-token',refresh_token:'synthetic-refresh-token',
-    token_type:'Bearer',expires_in:3600,scope:gmailSendOnlyScope}}};
+    token_type:'Bearer',expires_in:3600,id_token:'synthetic-signed-id-token-value-12345',scope:[gmailSendOnlyScope,'openid','https://www.googleapis.com/auth/userinfo.email'].join(' ')}}};
   };
   const callback={db:s.db,...settings,state,code:'synthetic-auth-code',adminVerified:true,fetcher,now:1000100};
   const result=await finishGmailAuthorization(callback);
   assert.equal(result.refreshToken,'synthetic-refresh-token');
+  assert.equal(result.verifiedSender,'board@bppcondos.org');
   assert.equal(sent,1);
   assert.equal(s.sqlite.prepare('SELECT consumed_at FROM gmail_oauth_handshakes').get().consumed_at,1000100);
   await assert.rejects(()=>finishGmailAuthorization(callback));
@@ -74,8 +84,8 @@ test('tampered state, expired state, non-admin callback and excess scope are all
   const auth=await beginGmailAuthorization({db:s.db,...settings,adminVerified:true,now:1000000});
   const state=new URL(auth.authorizationUrl).searchParams.get('state');
   let called=0;const fetcher=async()=>{called++;return {ok:true,async json(){return {
-   access_token:'synthetic-access-token',refresh_token:'synthetic-refresh-token',token_type:'Bearer',
-   scope:gmailSendOnlyScope+' https://mail.google.com/'}}}};
+   access_token:'synthetic-access-token',refresh_token:'synthetic-refresh-token',token_type:'Bearer',id_token:'synthetic-signed-id-token-value-12345',
+   scope:[gmailSendOnlyScope,'openid','https://www.googleapis.com/auth/userinfo.email','https://mail.google.com/'].join(' ')}}}};
   const base={db:s.db,...settings,adminVerified:true,state,code:'synthetic-auth-code',fetcher,now:1000100};
   await assert.rejects(()=>finishGmailAuthorization({...base,adminVerified:false}));
   await assert.rejects(()=>finishGmailAuthorization({...base,adminSession:'other-verified-admin-session-987654321'}));
