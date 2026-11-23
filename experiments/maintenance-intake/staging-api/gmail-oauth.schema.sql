@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS gmail_oauth_handshakes (
  state_hash TEXT PRIMARY KEY,
  admin_session_hash TEXT NOT NULL,
  pkce_verifier TEXT NOT NULL,
+ oidc_nonce TEXT NOT NULL,
  issued_at INTEGER NOT NULL,
  expires_at INTEGER NOT NULL,
  consumed_at INTEGER,
