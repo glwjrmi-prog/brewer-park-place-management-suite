@@ -49,7 +49,7 @@ export async function authenticatedEmail(db,raw,now=Date.now()){
 export async function residentRequests(db,session,now=Date.now()){
  const email=await authenticatedEmail(db,session,now);
  if(!email)return null;
- const records=await db.prepare('SELECT id,unit,area,category,description,escalation,status,created_at,reviewed_at,responsibility,resident_message FROM intake_requests WHERE submitter_email=? ORDER BY created_at DESC LIMIT 100').bind(email).all();
+ const records=await db.prepare('SELECT id,unit,area,category,description,escalation,status,version,created_at,reviewed_at,responsibility,resident_message FROM intake_requests WHERE submitter_email=? ORDER BY created_at DESC LIMIT 100').bind(email).all();
  // Never include notes, AI evaluation, board identity or another resident's request.
- return (records.results||[]).map(r=>({id:r.id,unit:r.unit,area:r.area,category:r.category,description:r.description,escalation:!!r.escalation,status:r.status,createdAt:r.created_at,reviewedAt:r.reviewed_at, ...(r.status==='reviewed'?{responsibility:r.responsibility,residentMessage:r.resident_message}:{})}));
+ return (records.results||[]).map(r=>({id:r.id,unit:r.unit,area:r.area,category:r.category,description:r.description,escalation:!!r.escalation,status:r.status,version:r.version,createdAt:r.created_at,reviewedAt:r.reviewed_at, ...(r.status==='reviewed'?{responsibility:r.responsibility,residentMessage:r.resident_message}:{})}));
 }
