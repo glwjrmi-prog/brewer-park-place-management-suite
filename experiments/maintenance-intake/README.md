@@ -247,3 +247,13 @@ Cloudflare's current Workers Access UI supports enabling Access for **one Worker
 Prepared `staging-api/d1-access-protected-health.mjs`, an alternative *read-only* health Worker that requires `ctx.access.getIdentity()` before reading database schema. It accepts no client-provided role headers, exposes no email, and performs no writes. It has **NOT been deployed**. Its isolated tests passed in GitHub Actions run **45201136705**.
 
 Also prepared a standalone `access-auth.mjs` JWT-verification module for future server-to-server board authorization, but it is not enabled or integrated. The new Cloudflare native `ctx.access` API is preferable for direct authenticated requests and still needs a Board-role allowlist, per-user audit identity, and separate resident magic-link flow before handling real requests.
+
+## November 23, 2026 — payment-method-free private test gateway (source only)
+
+Cloudflare Zero Trust Free activation requested a billing method and prospective overage authorization. The user opted not to enroll. Do **not** pressure the user to add payment information or activate Zero Trust solely for private intake testing.
+
+Added `staging-api/private-test-gateway.mjs`, an alternative **synthetic integration-test** perimeter. It denies everything by default, even health, unless *both* `STAGING_INTAKE_ENABLED=true` and `STAGING_PRIVATE_TEST_ENABLED=true` are explicitly set. For any enabled request, it requires an out-of-band cryptographically random 256-bit lowercase-hex `STAGING_TEST_SECRET` to match the `X-BPP-Staging-Gate` request header. The secret is never committed, echoed or logged, and the gate is distinct from the separate synthetic Board/resident role credentials. No origin header, request body, unit number, or browser-provided identity is treated as authentication.
+
+**Critical boundaries:** This is a private developer integration test harness, **not sufficient authentication for an operational resident portal**. The secret must be supplied by server-side tools, never placed in publicly served JavaScript. No credential has been configured on Cloudflare, no Worker code has been deployed, and the existing read-only health Worker remains unchanged. Production still requires secure real resident authentication/verification, server-authorized Board identity/roles, CSRF and abuse controls, email delivery, and live acceptance tests.
+
+GitHub Actions isolated test run **45204533745** passed synthetic tests for default-off behavior, wrong/missing gate token, separate Board-role token, and no DB access on denial. No chargeable Cloudflare service or account change was introduced.
