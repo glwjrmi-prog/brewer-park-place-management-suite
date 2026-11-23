@@ -259,3 +259,24 @@ test('disabled or failing advisor makes no advice record and cannot leak to resi
  assert.equal((await t.send(route,'board','POST',{version:1,actor:'Board'})).status,502);
  assert.equal(t.count('intake_policy_advice'),0);
 });
+
+test('staging advisor failures do not write raw upstream error details to logs',async()=>{
+ const t=sandbox();
+ const created=await t.send('/api/requests','resident','POST',sample(),'privacy-log-case');
+ const id=created.body.id;
+ t.env.POLICY_ADVISOR_ENABLED='true';
+ const privateMarker='SYNTHETIC-PRIVATE-MARKER-DO-NOT-LOG';
+ t.env.POLICY_ADVISOR_TEST_FETCH=async()=>{throw new Error(privateMarker)};
+ const observed=[];
+ const original=console.error;
+ console.error=(...args)=>observed.push(args);
+ try{
+  const result=await t.send('/api/requests/'+id+'/policy-advice','board','POST',{version:1,actor:'Test board'});
+  assert.equal(result.status,502);
+  assert.equal(t.count('intake_policy_advice'),0);
+ }finally{
+  console.error=original;
+ }
+ assert.equal(JSON.stringify(observed).includes(privateMarker),false);
+ assert.equal(observed.some(args=>args.includes('BPP_INTAKE_STAGING_ADVISOR_UNAVAILABLE')),true);
+});
