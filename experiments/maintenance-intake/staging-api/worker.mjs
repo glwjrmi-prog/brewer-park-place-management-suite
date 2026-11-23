@@ -213,6 +213,7 @@ async function review(req,env,id,headers){
 }
 export default {async fetch(req,env){
  const url=new URL(req.url),headers=cors(req,env);
+ if(env.STAGING_INTAKE_ENABLED!=='true')return encode({error:'Maintenance intake staging disabled'},503,headers);
  if(url.pathname==='/health'&&req.method==='GET')return encode({ok:true,service:'bpp-maintenance-intake-isolated-staging'},200,headers);
  const origin=req.headers.get('origin');
  if(origin&&origin!==String(env.ALLOWED_STAGING_ORIGIN||''))return encode({error:'Origin denied'},403,headers);
