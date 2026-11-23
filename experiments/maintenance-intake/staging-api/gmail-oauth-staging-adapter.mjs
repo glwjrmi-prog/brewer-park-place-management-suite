@@ -6,7 +6,7 @@
 import {handleGmailAdminOAuth} from './gmail-oauth-admin-http.mjs';
 import {saveBoardRefreshToken} from './gmail-vault.mjs';
 export async function handleIsolatedGmailSetup(request,env,{
- isVerifiedAdmin,getAdminSession,hasValidCsrf,fetcher=fetch,now=Date.now()
+ isVerifiedAdmin,getAdminSession,hasValidCsrf,returnAuthorizationJson=false,fetcher=fetch,now=Date.now()
 }={}){
  if(!env?.GMAIL_VAULT_KEY||!env?.INTAKE_DB||
   env?.STAGING_INTAKE_ENABLED!=='false'||env?.STAGING_GMAIL_OAUTH_ENABLED!=='true')
@@ -15,7 +15,7 @@ export async function handleIsolatedGmailSetup(request,env,{
   }});
  const vaultSecret=env.GMAIL_VAULT_KEY;
  return handleGmailAdminOAuth(request,env,{
-  isVerifiedAdmin,getAdminSession,hasValidCsrf,fetcher,now,
+  isVerifiedAdmin,getAdminSession,hasValidCsrf,returnAuthorizationJson,fetcher,now,
   async saveRefreshToken({refreshToken,scope}){
    if(scope!=='https://www.googleapis.com/auth/gmail.send')throw Error('Unexpected OAuth scope');
    await saveBoardRefreshToken({
