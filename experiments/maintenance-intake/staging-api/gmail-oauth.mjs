@@ -2,7 +2,9 @@
 // No Worker route is enabled by importing this module. No credentials in GitHub.
 // Admin must be separately authenticated before start and before callback.
 // Credentials/token persistence belong ONLY in an approved server-side secret store.
+import {verifyGoogleBoardIdentity,IDENTIFICATION_SCOPES} from './gmail-sender-identity.mjs';
 const SCOPE='https://www.googleapis.com/auth/gmail.send';
+const REQUESTED_SCOPES=[SCOPE,...IDENTIFICATION_SCOPES];
 const AUTH='https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN='https://oauth2.googleapis.com/token';
 const TTL=10*60*1000;
@@ -36,13 +38,13 @@ export async function beginGmailAuthorization({db,clientId,clientSecret,redirect
  validClock(now);
  const c=credentials({clientId,clientSecret,redirectUri});
  const boundAdmin=await adminHash(adminSession);
- const state=base64url(bytes(32)),verifier=base64url(bytes(32));
+ const state=base64url(bytes(32)),verifier=base64url(bytes(32)),nonce=base64url(bytes(32));
  const challenge=base64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));
- await db.prepare('INSERT INTO gmail_oauth_handshakes(state_hash,admin_session_hash,pkce_verifier,issued_at,expires_at) VALUES(?,?,?,?,?)')
-  .bind(await digest(state),boundAdmin,verifier,now,now+TTL).run();
+ await db.prepare('INSERT INTO gmail_oauth_handshakes(state_hash,admin_session_hash,pkce_verifier,oidc_nonce,issued_at,expires_at) VALUES(?,?,?,?,?,?)')
+  .bind(await digest(state),boundAdmin,verifier,nonce,now,now+TTL).run();
  const url=new URL(AUTH);
  for(const [key,value] of Object.entries({
-  client_id:c.clientId,redirect_uri:c.redirectUri,response_type:'code',scope:SCOPE,
+  client_id:c.clientId,redirect_uri:c.redirectUri,response_type:'code',scope:REQUESTED_SCOPES.join(' '),nonce,
   access_type:'offline',prompt:'consent',include_granted_scopes:'false',
   state,code_challenge:challenge,code_challenge_method:'S256'
  }))url.searchParams.set(key,value);
@@ -62,7 +64,7 @@ export async function finishGmailAuthorization({
  // Guard token exchange with atomic state consumption. Concurrent callbacks
  // cannot both exchange the same code or reuse an old auth handshake.
  const row=await db.prepare(
-  'SELECT pkce_verifier FROM gmail_oauth_handshakes WHERE state_hash=? AND admin_session_hash=? AND consumed_at IS NULL AND expires_at>?'
+  'SELECT pkce_verifier,oidc_nonce FROM gmail_oauth_handshakes WHERE state_hash=? AND admin_session_hash=? AND consumed_at IS NULL AND expires_at>?'
  ).bind(stateHash,boundAdmin,now).first();
  if(!row||! /^[a-zA-Z0-9_-]{43}$/.test(String(row.pkce_verifier||'')))
   throw new Error('OAuth session expired or used');
@@ -87,14 +89,16 @@ export async function finishGmailAuthorization({
  let data;
  try{data=await response.json()}catch{throw new Error('Malformed OAuth response')}
  // Caller must securely store refresh token; NEVER echo it to the user or logs.
- // Reject an unexpected scope set or a missing refresh token.
+ // Reject any unexpected or missing scope; verify the exact Google Workspace sender.
  const scopes=typeof data?.scope==='string'?data.scope.split(/\s+/).filter(Boolean):[];
- if(scopes.length!==1||scopes[0]!==SCOPE||
+ const actual=new Set(scopes),expected=new Set(REQUESTED_SCOPES);
+ if(actual.size!==expected.size||scopes.length!==expected.size||REQUESTED_SCOPES.some(x=>!actual.has(x))||
   typeof data?.refresh_token!=='string'||data.refresh_token.length<10||
   typeof data?.access_token!=='string'||data.access_token.length<10||
-  data?.token_type!=='Bearer')
+  data?.token_type!=='Bearer'||typeof data?.id_token!=='string')
   throw new Error('OAuth response lacks expected send-only offline access');
- return {accessToken:data.access_token,refreshToken:data.refresh_token,expiresIn:data.expires_in,scope:SCOPE};
+ await verifyGoogleBoardIdentity({idToken:data.id_token,clientId:c.clientId,nonce:row.oidc_nonce,fetcher});
+ return {accessToken:data.access_token,refreshToken:data.refresh_token,expiresIn:data.expires_in,scope:SCOPE,verifiedSender:'board@bppcondos.org'};
 }
 export async function refreshGmailAccess({clientId,clientSecret,redirectUri,refreshToken,fetcher=fetch}){
  const c=credentials({clientId,clientSecret,redirectUri});
