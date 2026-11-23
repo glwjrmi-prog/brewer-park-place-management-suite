@@ -42,8 +42,15 @@ test('successful callback stores refresh token only on server and never sends it
   const result=await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?state='+state+'&code=synthetic-code'),s.env,{
    ...s.ok,
    saveRefreshToken:async payload=>{stored=payload},
-   fetcher:async()=>({ok:true,async json(){return {token_type:'Bearer',access_token:'synthetic-access',
-    refresh_token:'synthetic-refresh',scope:'https://www.googleapis.com/auth/gmail.send',expires_in:3600}}})
+   fetcher:async(url)=>url==='https://oauth2.googleapis.com/tokeninfo'
+    ?{ok:true,async json(){return {iss:'https://accounts.google.com',aud:s.env.GMAIL_CLIENT_ID,
+      email:'board@bppcondos.org',email_verified:true,hd:'bppcondos.org',
+      nonce:s.sql.prepare('SELECT oidc_nonce FROM gmail_oauth_handshakes').get().oidc_nonce,
+      exp:Math.floor(Date.now()/1000)+3600}}}
+    :{ok:true,async json(){return {token_type:'Bearer',access_token:'synthetic-access',
+      refresh_token:'synthetic-refresh',id_token:'synthetic-id-token-1234567890123456789',
+      scope:'https://www.googleapis.com/auth/gmail.send openid https://www.googleapis.com/auth/userinfo.email',
+      expires_in:3600}}}
   });
   const wrongSession=await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?state='+state+'&code=synthetic-code'),s.env,{
    ...s.ok,getAdminSession:async()=> 'other-admin-browser-session-987654321',saveRefreshToken:async()=>{throw Error('must not save')},
