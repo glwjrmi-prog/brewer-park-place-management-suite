@@ -123,7 +123,7 @@ async function policyAdvice(req,env,id,headers){
  const fetcher=typeof env.POLICY_ADVISOR_TEST_FETCH==='function'?env.POLICY_ADVISOR_TEST_FETCH:fetch;
  let advice;
  try{advice=await askAdvisor({area:row.area,category:row.category,fetcher,signal:AbortSignal.timeout(10000)})}
- catch(e){console.error('Policy Advisor unavailable in isolated staging',e);return encode({error:'Advisor unavailable; board must review governing documents directly'},502,headers)}
+ catch(e){console.error('BPP_INTAKE_STAGING_ADVISOR_UNAVAILABLE');return encode({error:'Advisor unavailable; board must review governing documents directly'},502,headers)}
  const now=new Date().toISOString(),actor=body.actor.trim();
  try{
   const result=await env.INTAKE_DB.batch([
@@ -131,7 +131,7 @@ async function policyAdvice(req,env,id,headers){
    env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT request_id,'policy_advice_recorded','board',?,?,? FROM intake_policy_advice WHERE request_id=? AND requested_at=?").bind(actor,now,JSON.stringify({verified:false,category:row.category}),id,now)
   ]);
   if(Number(result?.[0]?.meta?.changes||0)!==1||Number(result?.[1]?.meta?.changes||0)!==1)return encode({error:'Request changed before advice was saved',code:'VERSION_CONFLICT'},409,headers);
- }catch(e){console.error('Policy advice staging write failed',e);return encode({error:'Could not save preliminary advice'},409,headers)}
+ }catch(e){console.error('BPP_INTAKE_STAGING_ADVICE_SAVE_FAILED');return encode({error:'Could not save preliminary advice'},409,headers)}
  return encode({ok:true,boardOnly:true,verified:false,advice:{answer:advice.answer,question:advice.question,source:advice.source,requestedBy:actor,requestedAt:now},warning:'Preliminary unverified advice only. Board must inspect source documents before determining responsibility.'},201,headers);
 }
 async function review(req,env,id,headers){
@@ -176,7 +176,7 @@ export default {async fetch(req,env){
    }
    const records=await residentRequests(env.INTAKE_DB,session);
    return records===null?encode({error:'Unauthorized'},401,headers):encode({ok:true,requests:records},200,headers);
-  }catch(e){console.error('Isolated private request lookup error',e);return encode({error:'Private access unavailable'},503,headers)}
+  }catch(e){console.error('BPP_INTAKE_STAGING_PRIVATE_ACCESS_FAILED');return encode({error:'Private access unavailable'},503,headers)}
  }
  if(!env.INTAKE_DB||!env.BOARD_STAGING_TOKEN||!env.RESIDENT_STAGING_TOKEN||env.BOARD_STAGING_TOKEN===env.RESIDENT_STAGING_TOKEN)return encode({error:'Staging configuration incomplete'},503,headers);
  const role=roleOf(req,env);if(!role)return encode({error:'Unauthorized'},401,headers);
@@ -193,5 +193,5 @@ export default {async fetch(req,env){
   const m=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/review$/);
   if(m&&req.method==='POST'&&role==='board')return review(req,env,m[1],headers);
   return encode({error:'Forbidden or not found'},role==='resident'?403:404,headers);
- }catch(e){console.error('Staging intake error',e);return encode({error:'Internal staging error'},500,headers)}
+ }catch(e){console.error('BPP_INTAKE_STAGING_REQUEST_FAILED');return encode({error:'Internal staging error'},500,headers)}
 }};
