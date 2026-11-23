@@ -189,3 +189,13 @@ End-user action still required only for secure access to the full deployed sourc
 - Prepared self-contained **staging-only** prompt adjustment `resident-accuracy-instructions.txt`, plus a complete local staging Worker draft `BPP_Staging_Policy_Accuracy_Review.txt` with only the current store ID and instruction additions. Local Node tests: **6/6 passed** (offline mocked requests, not real provider completions). The draft was **not** installed or deployed. Do not put the 2020 unverified amendment packet into the staging store; obtain verified current recorded Master Deed/Bylaws before release. Keep production unchanged and obtain explicit user approval before any production changes.
 
 **Next safe gate**: retrieve the official recorded instrument `20201215-0120440`, check Exhibit A and later recorded amendments, then add verified sources to staging, remove the temporary Rules-only coverage warning, rerun end-to-end source-fidelity and duration tests. 29.6s out of the 35s staging timeout merits latency investigation before go-live.
+
+## 2026-11-23: resident supplements and re-review (isolated development only)
+
+Implemented in the **undeployed** staging prototype: authenticated request owners can submit supplemental information through `POST /api/my-requests/:id/updates` using the existing private session, an exact request version, and a description up to 2,000 characters. They can read only their own updates through GET of that route. The simulated board can read updates through `GET /api/requests/:id/updates`; shared staging resident tokens cannot do so. Wrong owners receive the same 404 as missing requests.
+
+A supplement to a reviewed request invalidates its current decision and moves it back to `pending_board_review` while preserving the prior determination in the *board-only audit history*. The resident inbox shows no stale approved responsibility/message while pending. The action is atomic with a supplemental-update record and audit event, has optimistic concurrency checks, and refuses supplemental edits when a staging work-order draft already exists (to prevent diverging approved work orders). The private inbox now includes safe integer `version` for retry and concurrency handling.
+
+GitHub Actions isolated test run **45189711778** passed following addition of private ownership, stale-write, re-review, and draft-safety tests. This is a synthetic test result, not an operational or staging-server deployment.
+
+**No public resident access, photo storage, email sending, Board messaging, or production Management Suite integration was introduced. Keep this PR unmerged.**
