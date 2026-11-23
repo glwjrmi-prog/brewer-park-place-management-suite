@@ -6,6 +6,7 @@ import {webcrypto} from 'node:crypto';
 import {beginGmailAuthorization,finishGmailAuthorization,refreshGmailAccess,gmailSendOnlyScope} from './gmail-oauth.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const settings={
+ adminSession:'synthetic-admin-session-0123456789',
  clientId:'123456789-synthetic.apps.googleusercontent.com',
  clientSecret:'synthetic-secret-is-not-real',
  redirectUri:'https://bpp-maintenance-intake-staging.glwjrmi.workers.dev/oauth/gmail/callback'
@@ -34,6 +35,8 @@ test('admin-only start generates exact registered https redirect, random state a
   assert.match(url.searchParams.get('code_challenge'),/^[a-zA-Z0-9_-]{43}$/);
   const row=s.sqlite.prepare('SELECT * FROM gmail_oauth_handshakes').get();
   assert.equal(row.state_hash.length,64);
+  assert.equal(row.admin_session_hash.length,64);
+  assert.equal(row.admin_session_hash.includes(settings.adminSession),false);
   assert.notEqual(row.state_hash,url.searchParams.get('state'));
   assert.notEqual(row.pkce_verifier,url.searchParams.get('code_challenge'));
   assert.equal(result.expiresAt,1600000);
@@ -75,6 +78,7 @@ test('tampered state, expired state, non-admin callback and excess scope are all
    scope:gmailSendOnlyScope+' https://mail.google.com/'}}}};
   const base={db:s.db,...settings,adminVerified:true,state,code:'synthetic-auth-code',fetcher,now:1000100};
   await assert.rejects(()=>finishGmailAuthorization({...base,adminVerified:false}));
+  await assert.rejects(()=>finishGmailAuthorization({...base,adminSession:'other-verified-admin-session-987654321'}));
   await assert.rejects(()=>finishGmailAuthorization({...base,state:state.slice(0,42)+'!'}));
   await assert.rejects(()=>finishGmailAuthorization({...base,now:1700000}));
   assert.equal(called,0);
