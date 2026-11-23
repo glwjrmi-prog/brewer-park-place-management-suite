@@ -557,5 +557,7 @@ test('unit revocation at supplement transaction blocks data writes and leaves Bo
  assert.equal(update.status,409);
  assert.equal(t.count('intake_resident_updates'),0);
  assert.equal(t.count('intake_events'),1);
- assert.deepEqual(t.db.prepare('SELECT status,version FROM intake_requests WHERE id=?').get(id),{status:'pending_board_review',version:1});
+ const stored=t.db.prepare('SELECT status,version FROM intake_requests WHERE id=?').get(id);
+ assert.equal(stored.status,'pending_board_review');
+ assert.equal(stored.version,1);
 });
