@@ -68,6 +68,7 @@ async function residentUpdates(req,env,id,headers,ownerEmail){
  }
  let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
  if(!str(body?.details,2000)||!Number.isSafeInteger(body?.version)||body.version<1)return encode({error:'Update details and current request version required'},422,headers);
+ if(!['pending_board_review','reviewed'].includes(request.status))return encode({error:'Board-controlled request stage; contact the Board with further information'},409,headers);
  if(request.version!==body.version)return encode({error:'Request changed: refresh before updating',code:'VERSION_CONFLICT'},409,headers);
  const draft=await env.INTAKE_DB.prepare('SELECT id FROM staged_work_order_drafts WHERE intake_request_id=?').bind(id).first();
  if(draft)return encode({error:'A work-order draft exists; contact the Board with further updates'},409,headers);
@@ -75,7 +76,7 @@ async function residentUpdates(req,env,id,headers,ownerEmail){
  // Update + resident supplement + audit are atomic; the INSERT statements only
  // run when the owned request has actually moved to the requested next version.
  const result=await env.INTAKE_DB.batch([
-  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='pending_board_review',responsibility=NULL,priority=NULL,resident_message=NULL,review_notes=NULL,board_actor=NULL,reviewed_at=NULL,version=version+1 WHERE id=? AND submitter_email=? AND version=? AND NOT EXISTS(SELECT 1 FROM staged_work_order_drafts WHERE intake_request_id=?)").bind(id,ownerEmail,body.version,id),
+  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='pending_board_review',responsibility=NULL,priority=NULL,resident_message=NULL,review_notes=NULL,board_actor=NULL,reviewed_at=NULL,version=version+1 WHERE id=? AND submitter_email=? AND version=? AND status IN ('pending_board_review','reviewed') AND NOT EXISTS(SELECT 1 FROM staged_work_order_drafts WHERE intake_request_id=?)").bind(id,ownerEmail,body.version,id),
   env.INTAKE_DB.prepare("INSERT INTO intake_resident_updates(request_id,submitter_email,details,created_at) SELECT id,submitter_email,?,? FROM intake_requests WHERE id=? AND submitter_email=? AND version=? AND status='pending_board_review'").bind(details,now,id,ownerEmail,body.version+1),
   env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'resident_supplement','resident','verified email owner',?,? FROM intake_requests WHERE id=? AND submitter_email=? AND version=? AND status='pending_board_review'").bind(now,JSON.stringify({returnedToBoard:true}),id,ownerEmail,body.version+1)
  ]);
