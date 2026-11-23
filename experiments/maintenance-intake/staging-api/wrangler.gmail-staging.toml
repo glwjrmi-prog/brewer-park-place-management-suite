@@ -1,0 +1,27 @@
+# Dedicated BPP maintenance Gmail setup Worker. DEPLOYMENT CANDIDATE ONLY.
+# This file is not automatically deployed by GitHub and contains no credentials.
+# Do not use the Suite production database or deploy onto its Worker.
+name = "bpp-maintenance-intake-staging"
+main = "gmail-setup-worker.mjs"
+compatibility_date = "2026-11-19"
+
+[[d1_databases]]
+binding = "INTAKE_DB"
+database_name = "bpp-maintenance-intake-isolated-staging"
+database_id = "76e65da9-470f-4cc3-947b-5cba829af583"
+
+[vars]
+# Critical safety invariant: Gmail setup never enables resident intake.
+STAGING_INTAKE_ENABLED = "false"
+STAGING_PRIVATE_TEST_ENABLED = "false"
+STAGING_GMAIL_OAUTH_ENABLED = "false"
+POLICY_ADVISOR_ENABLED = "false"
+STAGING_ADMIN_ORIGIN = "https://bpp-maintenance-intake-staging.glwjrmi.workers.dev"
+GMAIL_REDIRECT_URI = "https://bpp-maintenance-intake-staging.glwjrmi.workers.dev/oauth/gmail/callback"
+GMAIL_VAULT_KEY_VERSION = "v1"
+
+# Secrets configured on dedicated Worker, NEVER committed:
+# GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_VAULT_KEY.
+# Google OAuth redirect must EXACTLY match GMAIL_REDIRECT_URI.
+# Flip STAGING_GMAIL_OAUTH_ENABLED only after security review, D1 verification,
+# Google consent configuration, and per-admin authenticated launch are ready.
