@@ -21,7 +21,7 @@ else{
    // Origin checks happen again on the server; PIN bearer is not persisted.
    const session=await fetch('/oauth/gmail/session',{
     method:'POST',credentials:'same-origin',redirect:'error',
-    headers:{origin:location.origin,'content-type':'application/json',
+    headers:{'content-type':'application/json',
      'x-bpp-setup-intent':'gmail-send-only',authorization:'Bearer '+token},
     body:'{}',cache:'no-store'
    });
@@ -37,6 +37,8 @@ else{
    if(google.origin!=='https://accounts.google.com'||
      google.pathname!=='/o/oauth2/v2/auth')throw Error('Unexpected Google address.');
    setStatus('Opening Google authorization…');
+   // Break opener relationship before navigating to third-party Google page.
+   window.opener=null;
    location.assign(google.href);
   }catch(e){setStatus(e?.message||'Gmail setup could not be started.');}
  });
