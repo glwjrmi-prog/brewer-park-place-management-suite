@@ -411,6 +411,6 @@ export default {
   // A public website must NOT embed this secret in JavaScript.
   const auth=await permitPrivateStaging(req,env);
   if(!auth.ok)return deny(auth.status);
-  return intakeWorker.fetch(req,env,ctx);
+  return intakeWorker.fetch(req,env);
  }
 };
