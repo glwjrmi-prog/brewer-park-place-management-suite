@@ -285,3 +285,11 @@ The associated synthetic test suite passed in GitHub Actions run **45208616015**
 The test-only maintenance Worker now caps JSON POST bodies at **8 KiB** while reading the stream rather than buffering arbitrary amounts of request data. Oversize submissions receive HTTP **413**, malformed or non-object JSON receives HTTP **400**, and neither creates any intake/audit records. The same protections cover Board review and other POST handlers. The modular Worker and both dashboard bundle variants remain synchronized.
 
 GitHub Actions run **45213533387**, job **137828395007**, completed successfully, including regression cases for oversized resident/Board bodies and no database writes. The code is **not deployed** to the Cloudflare staging Worker; the live Worker remains behind its existing disabled gate. No production or resident data changed.
+
+## November 23, 2026 — verified resident access to their specific units (planning and tests only)
+
+Added `staging-api/unit-authorization.mjs` as a deliberately separate authorization boundary. A resident's verified email session alone must **not** authorize any condo-unit maintenance history or action. Only Board-approved, active, explicitly verified email-to-unit assignments may grant access; unknown, inactive, unverified, duplicated and spoofed unit assignments are denied.
+
+All tests for cross-resident access, inactive Board approvals and spoofed unit identifiers passed in GitHub Actions run **45221880778**, job **137858021065**.
+
+**Not connected to live identity or D1**: a real Board-controlled resident/unit directory, identity lifecycle, unit-transfer/revocation procedure and consent verification still have to be implemented before this module can be used for production. No resident data, emails or Suite records were accessed or changed.
