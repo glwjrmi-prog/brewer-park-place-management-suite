@@ -54,6 +54,38 @@ async function submit(req,env,headers,ownerEmail=null){
  }
  return encode({ok:true,id,status:'pending_board_review',disclaimer:'Board review required. No responsibility decision has been made.'},201,headers);
 }
+
+// Private supplemental information from the owner of this individual intake.
+// A reviewed request returns to pending review; earlier board determinations stay
+// only in the audit trail and are no longer exposed as current resident guidance.
+async function residentUpdates(req,env,id,headers,ownerEmail){
+ const request=await env.INTAKE_DB.prepare('SELECT id,version,status FROM intake_requests WHERE id=? AND submitter_email=?').bind(id,ownerEmail).first();
+ if(!request)return encode({error:'Request not found'},404,headers);
+ if(req.method==='GET'){
+  const found=await env.INTAKE_DB.prepare('SELECT id,details,created_at AS createdAt FROM intake_resident_updates WHERE request_id=? AND submitter_email=? ORDER BY id ASC LIMIT 100').bind(id,ownerEmail).all();
+  return encode({ok:true,updates:found.results||[]},200,headers);
+ }
+ let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ if(!str(body?.details,2000)||!Number.isSafeInteger(body?.version)||body.version<1)return encode({error:'Update details and current request version required'},422,headers);
+ if(request.version!==body.version)return encode({error:'Request changed: refresh before updating',code:'VERSION_CONFLICT'},409,headers);
+ const draft=await env.INTAKE_DB.prepare('SELECT id FROM staged_work_order_drafts WHERE intake_request_id=?').bind(id).first();
+ if(draft)return encode({error:'A work-order draft exists; contact the Board with further updates'},409,headers);
+ const now=new Date().toISOString(),details=body.details.trim();
+ // Update + resident supplement + audit are atomic; the INSERT statements only
+ // run when the owned request has actually moved to the requested next version.
+ const result=await env.INTAKE_DB.batch([
+  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='pending_board_review',responsibility=NULL,priority=NULL,resident_message=NULL,review_notes=NULL,board_actor=NULL,reviewed_at=NULL,version=version+1 WHERE id=? AND submitter_email=? AND version=? AND NOT EXISTS(SELECT 1 FROM staged_work_order_drafts WHERE intake_request_id=?)").bind(id,ownerEmail,body.version,id),
+  env.INTAKE_DB.prepare("INSERT INTO intake_resident_updates(request_id,submitter_email,details,created_at) SELECT id,submitter_email,?,? FROM intake_requests WHERE id=? AND submitter_email=? AND version=? AND status='pending_board_review'").bind(details,now,id,ownerEmail,body.version+1),
+  env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'resident_supplement','resident','verified email owner',?,? FROM intake_requests WHERE id=? AND submitter_email=? AND version=? AND status='pending_board_review'").bind(now,JSON.stringify({returnedToBoard:true}),id,ownerEmail,body.version+1)
+ ]);
+ if(result.some(x=>Number(x?.meta?.changes||0)!==1))return encode({error:'Request changed: refresh before updating',code:'VERSION_CONFLICT'},409,headers);
+ return encode({ok:true,id,status:'pending_board_review',version:body.version+1,notice:'Additional information received; Board review required.'},201,headers);
+}
+async function boardUpdates(env,id,headers){
+ const found=await env.INTAKE_DB.prepare('SELECT id,details,created_at AS createdAt FROM intake_resident_updates WHERE request_id=? ORDER BY id ASC LIMIT 100').bind(id).all();
+ return encode({ok:true,updates:found.results||[]},200,headers);
+}
+
 async function list(env,headers){
  const result=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation,status,responsibility,priority,review_notes,board_actor,created_at,reviewed_at,urgent_ack_by,urgent_ack_at,version FROM intake_requests ORDER BY created_at DESC LIMIT 100').all();
  return encode({ok:true,requests:(result.results||[]).map(r=>({...safeRequest(r),reviewNotes:r.review_notes,boardActor:r.board_actor,provisionalAssessment:{responsibility:'not_assessed',reason:'Awaiting verified governing documents and board review',citations:[]}}))},200,headers);
@@ -164,12 +196,17 @@ export default {async fetch(req,env){
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
  // PRIVATE READ: only a separately verified, short-lived resident session may list requests.
  // Do not accept the shared staging resident token or a unit number as proof of identity.
- if((url.pathname==='/api/my-requests'&&req.method==='GET')||(url.pathname==='/api/private/requests'&&req.method==='POST')){
+ const privateUpdates=url.pathname.match(/^\/api\/my-requests\/(BPP-STG-[a-f0-9-]+)\/updates$/);
+ if((url.pathname==='/api/my-requests'&&req.method==='GET')||(url.pathname==='/api/private/requests'&&req.method==='POST')||(privateUpdates&&(req.method==='GET'||req.method==='POST'))){
   if(!env.INTAKE_DB)return encode({error:'Staging configuration incomplete'},503,headers);
   const h=req.headers.get('authorization')||'';
   if(!h.startsWith('Bearer '))return encode({error:'Unauthorized'},401,headers);
   try{
    const session=h.slice(7);
+   if(privateUpdates){
+    const email=await authenticatedEmail(env.INTAKE_DB,session);
+    return email?residentUpdates(req,env,privateUpdates[1],headers,email):encode({error:'Unauthorized'},401,headers);
+   }
    if(req.method==='POST'){
     const email=await authenticatedEmail(env.INTAKE_DB,session);
     return email?submit(req,env,headers,email):encode({error:'Unauthorized'},401,headers);
@@ -184,6 +221,8 @@ export default {async fetch(req,env){
   if(url.pathname==='/api/requests'&&req.method==='POST'&&role==='resident')return submit(req,env,headers);
   if(url.pathname==='/api/requests'&&req.method==='GET'&&role==='board')return list(env,headers);
   if(url.pathname==='/api/work-order-drafts'&&req.method==='GET'&&role==='board')return listWorkOrderDrafts(env,headers);
+  const boardSupplement=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/updates$/);
+  if(boardSupplement&&req.method==='GET'&&role==='board')return boardUpdates(env,boardSupplement[1],headers);
   const advisor=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/policy-advice$/);
   if(advisor&&(req.method==='GET'||req.method==='POST')&&role==='board')return policyAdvice(req,env,advisor[1],headers);
   const draft=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/work-order-draft$/);
