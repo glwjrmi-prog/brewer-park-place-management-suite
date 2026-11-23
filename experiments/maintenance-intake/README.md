@@ -229,3 +229,11 @@ The user showed the **bpp-maintenance-intake-isolated-staging** Cloudflare Conso
 Prepared `staging-api/worker-dashboard-bundle.mjs` as a standalone copy/paste candidate containing the modular intake Worker, email-challenge primitives and board-only advisory adapter in one file. Both modular and bundled Workers now default to HTTP 503 for all routes unless `STAGING_INTAKE_ENABLED='true'` is explicitly configured. `wrangler.toml.example` sets it to `false`. GitHub Actions isolated test run **45196169502** job **137767070795** passed, including bundle import, fail-closed and health parity checks.
 
 **Not deployed:** No Cloudflare Worker or database binding has been installed, no email provider is connected, and no credentials/actual resident data are available. Do not publish the bundle with shared test credentials on a public origin. A secure staging access boundary must be configured before activating it.
+
+## 2026-11-23: verified Cloudflare Access identity adapter — code only, not active
+
+Implemented isolated `staging-api/access-auth.mjs`, an RSA-signature-verifying Cloudflare Access JWT parser for future **private Board staging** access. It validates the Cloudflare Access issuer, application audience, RS256 signature against the team's JWKS, expiration and not-before timestamps, and email claim before accepting a board identity. A separate explicit server-side allowlist gate excludes any otherwise valid but unauthorized account. The module never trusts client-supplied `X-Email`, `X-Role` or a typed Board member name as authentication.
+
+Synthetic cryptographic regression checks reject forged algorithms, wrong issuer/audience, wrong allowlist, expired/future tokens and tampering. The GitHub Actions isolated test run **45200702450** completed successfully.
+
+**Important:** The module is NOT yet wired into the staging intake Worker and no Cloudflare Access application, team domain, authorized audience or approved Board identity list has been configured. It MUST NOT be interpreted as authorization for exposing the existing shared-token maintenance Worker on a public URL. The currently deployed Cloudflare Worker remains the read-only schema health probe. Configuring Access and replacing test-only Board tokens/actor labels will require separately verified permissions and end-to-end staging tests.
