@@ -363,3 +363,11 @@ Hardened the unmounted Google consent flow so an OAuth authorization started by 
 The regression tests cover an unrelated authenticated administrator attempting to finish another user's callback, blank/unavailable admin sessions, CSRF protection, state replay and expiration. GitHub Actions run **45268994716**, job **138023442774**, passed all isolated and live-disabled-gate checks.
 
 No live BPP login adapter, callback route, token vault or Gmail provider credentials are installed. **Do not register the callback URI or enable the staging Worker yet.** The disabled staging API cannot safely handle live OAuth authorization until all of these gates are present and separately reviewed.
+
+## November 23, 2026 — explicit Board sender identity check (source and CI only)
+
+The designated sending account is `board@bppcondos.org`, a directly sign-in-able Google Workspace mailbox. Added isolated `staging-api/gmail-sender-identity.mjs` and tests to reject authorizations for other users, even from `bppcondos.org`. To verify sender ownership, the future OAuth flow must request only Gmail `gmail.send` plus basic OpenID `openid` and email identity permission; it must validate Google's ID token server-side, including OAuth client audience, issuer, exact verified email, hosted domain `bppcondos.org`, expiry and authorization nonce. No mailbox reading or Gmail modification scope is required.
+
+**Important:** the production-bound consent path is NOT wired to this identity verifier yet; existing `gmail-oauth.mjs` alone only requests `gmail.send` and does NOT prove which account consented. Do not authorize or deploy the flow until token identity is integrated and end-to-end tested. Google documentation confirms the `gmail.send` scope cannot call `users.getProfile`, so identity cannot be confirmed with only the Gmail send-only API permission.
+
+GitHub Actions run **45274777378** passed all available synthetic tests. No real Google account sign-in, OAuth token, D1 schema migration, or sent email has occurred.
