@@ -8,7 +8,7 @@ import {authenticatedEmail} from './resident-access.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 function staging(){
  const sqlite=new DatabaseSync(':memory:');
- for(const file of ['schema.sql','resident-email-schema.sql','verified-unit-registry.schema.sql'])
+ for(const file of ['schema.sql','resident-email-schema.sql','verified-unit-registry.schema.sql','resident-login-rate-limit.schema.sql'])
   sqlite.exec(readFileSync(new URL(file,import.meta.url),'utf8'));
  const stmt=(sql,args=[])=>({
   bind(...v){return stmt(sql,v)},
@@ -28,7 +28,7 @@ function staging(){
 }
 const goodCaptcha=async(url,opts)=>({ok:url.includes('/siteverify'),async json(){assert.equal(opts.method,'POST');assert.ok(String(opts.body).includes('secret'));return {success:true}}});
 const badCaptcha=async()=>({ok:true,async json(){return {success:false}}});
-const options={turnstileToken:'synthetic-human-challenge',secret:'test-turnstile-secret-xyz',fetcher:goodCaptcha,linkBase:'https://example.test/maintenance/login',now:1000000};
+const options={turnstileToken:'synthetic-human-challenge',secret:'test-turnstile-secret-xyz',fetcher:goodCaptcha,linkBase:'https://example.test/maintenance/login',requesterId:'trusted-net-example',rateLimitSecret:'S'.repeat(64),now:1000000};
 test('only active Board-verified residents receive one-time email; public responses cannot reveal their status',async()=>{
  const t=staging();try{
   t.registry('valid@example.test');
