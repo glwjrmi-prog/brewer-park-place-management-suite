@@ -237,3 +237,13 @@ Implemented isolated `staging-api/access-auth.mjs`, an RSA-signature-verifying C
 Synthetic cryptographic regression checks reject forged algorithms, wrong issuer/audience, wrong allowlist, expired/future tokens and tampering. The GitHub Actions isolated test run **45200702450** completed successfully.
 
 **Important:** The module is NOT yet wired into the staging intake Worker and no Cloudflare Access application, team domain, authorized audience or approved Board identity list has been configured. It MUST NOT be interpreted as authorization for exposing the existing shared-token maintenance Worker on a public URL. The currently deployed Cloudflare Worker remains the read-only schema health probe. Configuring Access and replacing test-only Board tokens/actor labels will require separately verified permissions and end-to-end staging tests.
+
+## 2026-11-23: Next release gate — protect only the new staging Worker
+
+The operator successfully deployed the **read-only** D1 health checker to `bpp-maintenance-intake-staging.glwjrmi.workers.dev` and configured the binding `INTAKE_DB`. GitHub Actions run `45199791734` verified a real HTTP 200 `{status:"ready",databaseConnected:true,schemaReady:true}` response from the new staging Worker. **No intake/write handlers are deployed.**
+
+Cloudflare's current Workers Access UI supports enabling Access for **one Worker**, from its **Access** tab > **Protect this Worker behind Access**. To avoid locking or changing unrelated systems, protect **only** `bpp-maintenance-intake-staging`, with **All traffic**, and a Cloudflare-account or exact-email allow rule. **Do not enable account-wide protection**, which might inadvertently gate the public Policy Advisor and Management Suite API. Browser ownership and Cloudflare policy application remain user-controlled.
+
+Prepared `staging-api/d1-access-protected-health.mjs`, an alternative *read-only* health Worker that requires `ctx.access.getIdentity()` before reading database schema. It accepts no client-provided role headers, exposes no email, and performs no writes. It has **NOT been deployed**. Its isolated tests passed in GitHub Actions run **45201136705**.
+
+Also prepared a standalone `access-auth.mjs` JWT-verification module for future server-to-server board authorization, but it is not enabled or integrated. The new Cloudflare native `ctx.access` API is preferable for direct authenticated requests and still needs a Board-role allowlist, per-user audit identity, and separate resident magic-link flow before handling real requests.
