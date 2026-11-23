@@ -6,7 +6,7 @@ const hex=bytes=>[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0'
 async function subjectHash(secret,scope,value){
  if(typeof secret!=='string'||secret.length<32||typeof value!=='string'||value.length<1)
   throw new Error('Rate-limit secret or subject missing');
- const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),'HMAC',false,['sign']);
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
  return hex(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(scope+':'+value)));
 }
 async function increment(db,scope,key,now,windowMs,maxAttempts){
