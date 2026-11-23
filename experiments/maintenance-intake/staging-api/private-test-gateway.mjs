@@ -22,8 +22,7 @@ export async function permitPrivateStaging(req,env){
  if(env?.STAGING_INTAKE_ENABLED!=='true'||env?.STAGING_PRIVATE_TEST_ENABLED!=='true')
   return {ok:false,status:503};
  const secret=env?.STAGING_TEST_SECRET;
- const bearer=req.headers.get('authorization')||'';
- const supplied=bearer.startsWith('Bearer ')?bearer.slice(7):'';
+ const supplied=req.headers.get('x-bpp-staging-gate')||'';
  if(!allowedToken.test(secret||'')||!allowedToken.test(supplied))
   return {ok:false,status:401};
  if(!await equalToken(supplied,secret))return {ok:false,status:401};
@@ -31,7 +30,7 @@ export async function permitPrivateStaging(req,env){
 }
 export default {
  async fetch(req,env,ctx){
-  // Only exact, externally supplied server-side test bearer secret unlocks.
+  // Only exact, externally supplied server-side secret header unlocks.
   // A public website must NOT embed this secret in JavaScript.
   const auth=await permitPrivateStaging(req,env);
   if(!auth.ok)return deny(auth.status);
