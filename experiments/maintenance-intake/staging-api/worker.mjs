@@ -271,11 +271,11 @@ export default {async fetch(req,env){
    }
    if(privateUpdates){
     const email=await authenticatedEmail(env.INTAKE_DB,session);
-    return email?residentUpdates(req,env,privateUpdates[1],headers,email,scoped):encode({error:'Unauthorized'},401,headers);
+    return email?await residentUpdates(req,env,privateUpdates[1],headers,email,scoped):encode({error:'Unauthorized'},401,headers);
    }
    if(req.method==='POST'){
     const email=await authenticatedEmail(env.INTAKE_DB,session);
-    return email?submit(req,env,headers,email,scoped):encode({error:'Unauthorized'},401,headers);
+    return email?await submit(req,env,headers,email,scoped):encode({error:'Unauthorized'},401,headers);
    }
    const records=await residentRequests(env.INTAKE_DB,session);
    if(records===null)return encode({error:'Unauthorized'},401,headers);
