@@ -32,7 +32,7 @@ function sandbox(){
      }catch(e){db.exec('ROLLBACK');throw e}
    }
  };
- const env={INTAKE_DB:database,BOARD_STAGING_TOKEN:'board-test-secret',RESIDENT_STAGING_TOKEN:'resident-test-secret',STAGING_BOARD_RECIPIENT_KEYS:JSON.stringify(['test-board-a','test-board-b','test-board-c']),ALLOWED_STAGING_ORIGIN:'https://private-test.example'};
+ const env={INTAKE_DB:database,BOARD_STAGING_TOKEN:'board-test-secret',RESIDENT_STAGING_TOKEN:'resident-test-secret',STAGING_INTAKE_ENABLED:'true',STAGING_BOARD_RECIPIENT_KEYS:JSON.stringify(['test-board-a','test-board-b','test-board-c']),ALLOWED_STAGING_ORIGIN:'https://private-test.example'};
  const send=async(path,role='resident',method='GET',payload=null,key='test-key-1')=>{
    const headers={'authorization':'Bearer '+(role==='board'?env.BOARD_STAGING_TOKEN:role==='resident'?env.RESIDENT_STAGING_TOKEN:'not-authorized'),'origin':env.ALLOWED_STAGING_ORIGIN};
    if(payload!==null)headers['content-type']='application/json';
@@ -373,4 +373,17 @@ test('owner-only reviewed work cannot be HOA scheduled',async()=>{
  const response=await t.send('/api/requests/'+id+'/status','board','POST',{version:2,status:'scheduled',actor:'Board',notes:'Attempted'});
  assert.equal(response.status,422);
  assert.equal(t.count('intake_events'),2);
+});
+
+
+test('new staging Worker is disabled by default even with credentials and correct origin',async()=>{
+ const t=sandbox();delete t.env.STAGING_INTAKE_ENABLED;
+ assert.equal((await t.send('/api/requests','board','GET')).status,503);
+ const privateChallenge=await createEmailChallenge(t.database,'disabled@example.com');
+ const session=await consumeEmailChallenge(t.database,privateChallenge.privateToken);
+ const r=await worker.fetch(new Request('https://staging.test/api/my-requests',{headers:{authorization:'Bearer '+session.privateSession,origin:t.env.ALLOWED_STAGING_ORIGIN}}),t.env);
+ assert.equal(r.status,503);
+ const health=await t.send('/health','board','GET');
+ assert.equal(health.status,503);
+ assert.equal(t.count('intake_requests'),0);
 });
