@@ -22,7 +22,7 @@ function originOf(req){
  return url.origin;
 }
 export async function handleGmailAdminOAuth(req,env,{
- isVerifiedAdmin,getAdminSession,hasValidCsrf,saveRefreshToken,now=Date.now(),fetcher=fetch
+ isVerifiedAdmin,getAdminSession,hasValidCsrf,saveRefreshToken,returnAuthorizationJson=false,now=Date.now(),fetcher=fetch
 }={}){
  // All auth checks must use real, server-validated per-person Board/admin
  // identities. Never trust a request header's stated role.
@@ -43,7 +43,12 @@ export async function handleGmailAdminOAuth(req,env,{
    !await hasValidCsrf(req))return reply('Forbidden',403);
   try{
    const flow=await beginGmailAuthorization({...config,adminVerified:true,adminSession,now});
-   return reply('',302,{location:flow.authorizationUrl});
+   return returnAuthorizationJson===true
+    ?new Response(JSON.stringify({authorizationUrl:flow.authorizationUrl}),{status:200,headers:{
+      'content-type':'application/json; charset=utf-8','cache-control':'no-store, private',
+      'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'
+     }})
+    :reply('',302,{location:flow.authorizationUrl});
   }catch{return reply('Unable to start authorization',503)}
  }
  if(url.pathname==='/oauth/gmail/callback'){
