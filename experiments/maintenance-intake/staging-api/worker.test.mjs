@@ -342,3 +342,35 @@ test('reviewed request with existing draft refuses supplemental edits, preservin
  assert.equal(t.count('intake_resident_updates'),0);
  assert.equal(t.count('staged_work_order_drafts'),1);
 });
+
+test('board-only lifecycle changes are versioned and visible to verified owner without exposing notes',async()=>{
+ const t=sandbox();
+ const c=await createEmailChallenge(t.database,'lifecycle-owner@example.com');
+ const session=(await consumeEmailChallenge(t.database,c.privateToken)).privateSession;
+ const h={authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN,'content-type':'application/json','idempotency-key':'lifecycle-sample'};
+ const first=await worker.fetch(new Request('https://staging.test/api/private/requests',{method:'POST',headers:h,body:JSON.stringify(sample())}),t.env);
+ const id=(await first.json()).id;
+ assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',{version:1,actor:'Board',notes:'Initial private decision',responsibility:'association',priority:'routine'})).status,200);
+ const path='/api/requests/'+id+'/status';
+ assert.equal((await t.send(path,'resident','POST',{version:2,status:'scheduled',actor:'Impersonation',notes:'no'})).status,403);
+ assert.equal((await t.send(path,'board','POST',{version:1,status:'scheduled',actor:'Board',notes:'stale'})).status,409);
+ const planned=await t.send(path,'board','POST',{version:2,status:'scheduled',actor:'Board',notes:'PRIVATE vendor note',residentMessage:'The Board is arranging next steps.'});
+ assert.equal(planned.status,200);
+ assert.equal(planned.body.version,3);
+ const privateView=await worker.fetch(new Request('https://staging.test/api/my-requests',{headers:h}),t.env);
+ const inbox=(await privateView.json()).requests;
+ assert.equal(inbox[0].status,'scheduled');
+ assert.equal(inbox[0].residentMessage,'The Board is arranging next steps.');
+ assert.equal(JSON.stringify(inbox).includes('PRIVATE vendor note'),false);
+ const done=await t.send(path,'board','POST',{version:3,status:'completed',actor:'Board',notes:'Finished in simulated workflow',residentMessage:'The Board has marked this request complete.'});
+ assert.equal(done.status,200);
+ assert.equal((await t.send(path,'board','POST',{version:4,status:'scheduled',actor:'Board',notes:'Reopen without review'})).status,409);
+ assert.equal(t.count('intake_events'),4);
+});
+test('owner-only reviewed work cannot be HOA scheduled',async()=>{
+ const t=sandbox(),first=await t.send('/api/requests','resident','POST',sample(),'owner-status-case'),id=first.body.id;
+ assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',{version:1,actor:'Board',notes:'Owner assigned',responsibility:'owner',priority:'routine'})).status,200);
+ const response=await t.send('/api/requests/'+id+'/status','board','POST',{version:2,status:'scheduled',actor:'Board',notes:'Attempted'});
+ assert.equal(response.status,422);
+ assert.equal(t.count('intake_events'),2);
+});
