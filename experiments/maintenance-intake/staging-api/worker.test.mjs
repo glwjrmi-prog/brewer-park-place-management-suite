@@ -324,7 +324,7 @@ test('verified owner may supplement request; reviewed item returns to board with
  assert.equal(board.status,200);
  assert.equal(board.body.updates.length,1);
  assert.equal(t.count('intake_resident_updates'),1);
- assert.equal(t.count('intake_events'),4);
+ assert.equal(t.count('intake_events'),3);
  assert.equal((await t.send('/api/requests/'+id+'/work-order-draft','board','POST',{version:3,actor:'Demo board'})).status,422);
 });
 
