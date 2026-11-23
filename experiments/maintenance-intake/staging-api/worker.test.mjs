@@ -447,3 +447,57 @@ test('large Board-review body fails closed and cannot change request or audit',a
  assert.equal(record.version,1);
  assert.equal(t.count('intake_events'),1);
 });
+
+test('Board-verified unit registry controls private submission, inbox and supplements when enabled',async()=>{
+ const t=sandbox();
+ t.db.exec(readFileSync(new URL('./verified-unit-registry.schema.sql',import.meta.url),'utf8'));
+ t.env.STAGING_VERIFIED_UNIT_ACCESS_ENABLED='true';
+ const add=t.db.prepare('INSERT INTO intake_verified_unit_access(verified_email,unit_id,active,approved_by,approved_at,revoked_at) VALUES(?,?,?,?,?,?)');
+ add.run('a@example.com','Sample Unit 12',1,'test-board','2026-11-23T00:00:00Z',null);
+ add.run('b@example.com','Different Unit',1,'test-board','2026-11-23T00:00:00Z',null);
+ const a=await createEmailChallenge(t.database,'a@example.com');
+ const b=await createEmailChallenge(t.database,'b@example.com');
+ const sa=(await consumeEmailChallenge(t.database,a.privateToken)).privateSession;
+ const sb=(await consumeEmailChallenge(t.database,b.privateToken)).privateSession;
+ async function call(route,session,body,key='scoped-1'){
+  const headers={authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN,
+   'content-type':'application/json','idempotency-key':key};
+  const r=await worker.fetch(new Request('https://staging.test'+route,{
+   method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined
+  }),t.env);
+  return {status:r.status,body:await r.json()};
+ }
+ assert.deepEqual((await call('/api/my-units',sa)).body.units,['Sample Unit 12']);
+ assert.deepEqual((await call('/api/my-units',sb)).body.units,['Different Unit']);
+ assert.equal((await call('/api/private/requests',sb,sample(),'wrong-resident')).status,403);
+ assert.equal(t.count('intake_requests'),0);
+ const created=await call('/api/private/requests',sa,sample(),'correct-resident');
+ assert.equal(created.status,201);
+ const id=created.body.id;
+ assert.equal((await call('/api/private/requests',sa,sample(),'correct-resident')).status,200);
+ assert.equal((await call('/api/my-requests',sa)).body.requests.length,1);
+ assert.equal((await call('/api/my-requests',sb)).body.requests.length,0);
+ assert.equal((await call('/api/my-requests/'+id+'/updates',sb)).status,404);
+ assert.equal((await call('/api/my-requests/'+id+'/updates',sa)).status,200);
+ t.db.prepare('UPDATE intake_verified_unit_access SET active=0,revoked_at=? WHERE verified_email=? AND unit_id=?')
+  .run('2026-11-23T00:02:00Z','a@example.com','Sample Unit 12');
+ assert.deepEqual((await call('/api/my-units',sa)).body.units,[]);
+ assert.equal((await call('/api/my-requests',sa)).body.requests.length,0);
+ assert.equal((await call('/api/my-requests/'+id+'/updates',sa)).status,404);
+ assert.equal((await call('/api/my-requests/'+id+'/updates',sa,{version:1,details:'After revocation'})).status,404);
+ assert.equal((await call('/api/private/requests',sa,sample(),'correct-resident')).status,403);
+ assert.equal(t.count('intake_resident_updates'),0);
+ assert.equal(t.count('intake_requests'),1);
+});
+test('missing Board-approved registry fails private access closed rather than leaking prior records',async()=>{
+ const t=sandbox();t.env.STAGING_VERIFIED_UNIT_ACCESS_ENABLED='true';
+ const challenge=await createEmailChallenge(t.database,'old@example.com');
+ const session=(await consumeEmailChallenge(t.database,challenge.privateToken)).privateSession;
+ const req=route=>new Request('https://staging.test'+route,{headers:{authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN}});
+ assert.equal((await worker.fetch(req('/api/my-units'),t.env)).status,503);
+ assert.equal((await worker.fetch(req('/api/my-requests'),t.env)).status,503);
+ const headers={authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN,'content-type':'application/json','idempotency-key':'missing-registry'};
+ const r=await worker.fetch(new Request('https://staging.test/api/private/requests',{method:'POST',headers,body:JSON.stringify(sample())}),t.env);
+ assert.equal(r.status,503);
+ assert.equal(t.count('intake_requests'),0);
+});
