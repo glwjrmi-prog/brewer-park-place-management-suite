@@ -199,3 +199,9 @@ A supplement to a reviewed request invalidates its current decision and moves it
 GitHub Actions isolated test run **45189711778** passed following addition of private ownership, stale-write, re-review, and draft-safety tests. This is a synthetic test result, not an operational or staging-server deployment.
 
 **No public resident access, photo storage, email sending, Board messaging, or production Management Suite integration was introduced. Keep this PR unmerged.**
+
+## 2026-11-23: reviewed request lifecycle (isolated development only)
+
+Added board-only `POST /api/requests/:id/status` to move a reviewed maintenance request to `scheduled`, `deferred`, or `completed` in **the isolated staging dataset only**. Every transition requires Board staging authorization, the exact current request version, actor and internal notes; approved resident-facing status text is stored separately. Completed items cannot be casually reopened through this endpoint. Owner-only repairs cannot be scheduled as HOA work. Verified residents continue to see approved messages and responsibility through scheduled/deferred/completed stages, but never Board notes.
+
+GitHub Actions isolated run **45190113455** completed successfully with new authorization, stale-version, owner-only, resident-visibility, and lifecycle tests. These statuses are not linked to any contractor, email delivery, or live Management Suite data. **Keep this PR unmerged until the authenticated staging integration and Board authorization workflow are tested.**
