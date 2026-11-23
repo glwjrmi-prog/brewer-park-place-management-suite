@@ -387,3 +387,29 @@ test('new staging Worker is disabled by default even with credentials and correc
  assert.equal(health.status,503);
  assert.equal(t.count('intake_requests'),0);
 });
+
+test('resident may read earlier supplements but cannot reopen scheduled, deferred or completed Board-controlled items',async()=>{
+ for(const nextStatus of ['scheduled','deferred','completed']){
+  const t=sandbox();
+  const challenge=await createEmailChallenge(t.database,'progress@example.com');
+  const session=(await consumeEmailChallenge(t.database,challenge.privateToken)).privateSession;
+  const h={authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN,'content-type':'application/json','idempotency-key':'board-controlled-'+nextStatus};
+  const created=await worker.fetch(new Request('https://staging.test/api/private/requests',{method:'POST',headers:h,body:JSON.stringify(sample())}),t.env);
+  assert.equal(created.status,201);
+  const id=(await created.json()).id;
+  const review={actor:'Test Board',notes:'Approved',version:1,responsibility:'association',priority:'routine'};
+  assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',review)).status,200);
+  const moved=await t.send('/api/requests/'+id+'/status','board','POST',{actor:'Test Board',notes:'Stage updated',version:2,status:nextStatus});
+  assert.equal(moved.status,200);
+  const path='https://staging.test/api/my-requests/'+id+'/updates';
+  const denied=await worker.fetch(new Request(path,{method:'POST',headers:h,body:JSON.stringify({version:3,details:'Trying to reopen Board-controlled work'})}),t.env);
+  assert.equal(denied.status,409,nextStatus);
+  const view=await worker.fetch(new Request(path,{method:'GET',headers:h}),t.env);
+  assert.equal(view.status,200,nextStatus);
+  const stored=t.db.prepare('SELECT status,version FROM intake_requests WHERE id=?').get(id);
+  assert.equal(stored.status,nextStatus);
+  assert.equal(stored.version,3);
+  assert.equal(t.count('intake_resident_updates'),0);
+  assert.equal(t.count('intake_events'),3);
+ }
+});
