@@ -5,10 +5,11 @@
 // address/network abuse controls. No provider or account is configured here.
 import {normalizeEmail,createEmailChallenge,consumeEmailChallenge} from './resident-access.mjs';
 import {activeUnitsForVerifiedEmail} from './verified-unit-registry.mjs';
+import {reserveLoginAttempt} from './resident-login-rate-limit.mjs';
 const generic=Object.freeze({ok:true,message:'If this address is authorized, a sign-in email will be sent.'});
 const invalid=Object.freeze({ok:false,message:'Please check the information and try again.'});
 const maxCaptchaLength=4096;
-export async function verifyTurnstile({token,secret,fetcher=fetch,remoteIp,now=Date.now()}){
+export async function verifyTurnstile({token,secret,fetcher=fetch,remoteIp,requesterId,rateLimitSecret,now=Date.now()}){
  if(typeof token!=='string'||token.length<1||token.length>maxCaptchaLength||typeof secret!=='string'||secret.length<12)
   return false;
  try{
@@ -31,6 +32,11 @@ export async function requestPrivateLogin({db,email,turnstileToken,secret,fetche
   return invalid;
  const captcha=await verifyTurnstile({token:turnstileToken,secret,fetcher,remoteIp,now});
  if(!captcha)return invalid;
+ // All valid and unknown emails use the same quota path; never reveal registry existence.
+ // requesterId must come from the trusted Cloudflare edge, never from an untrusted form field.
+ try{
+  if(!await reserveLoginAttempt({db,email:valid,requesterId,secret:rateLimitSecret,now}))return generic;
+ }catch{return invalid}
  // The trust decision comes solely from the Board-managed, active unit registry.
  const units=await activeUnitsForVerifiedEmail(db,valid);
  if(!units.length)return generic;
