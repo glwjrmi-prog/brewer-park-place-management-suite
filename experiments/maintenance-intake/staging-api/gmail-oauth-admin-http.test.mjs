@@ -15,7 +15,7 @@ function sandbox(){
   STAGING_ADMIN_ORIGIN:origin,GMAIL_CLIENT_ID:'123456789-synthetic.apps.googleusercontent.com',
   GMAIL_CLIENT_SECRET:'synthetic-server-secret-not-real',GMAIL_REDIRECT_URI:origin+'/oauth/gmail/callback'};
  const req=(path,method='GET',h={})=>new Request(origin+path,{method,headers:h});
- const ok={isVerifiedAdmin:async()=>true,hasValidCsrf:async()=>true,now:1000000};
+ const ok={isVerifiedAdmin:async()=>true,getAdminSession:async()=> 'synthetic-admin-session-0123456789',hasValidCsrf:async()=>true,now:1000000};
  return {sql,env,req,ok,close:()=>sql.close()};
 }
 test('admin-only starting OAuth requires POST, same-origin and server-verified CSRF',async()=>{
@@ -26,6 +26,7 @@ test('admin-only starting OAuth requires POST, same-origin and server-verified C
   assert.equal((await handleGmailAdminOAuth(post,s.env,{...s.ok,isVerifiedAdmin:async()=>false})).status,401);
   assert.equal((await handleGmailAdminOAuth(post,s.env,{...s.ok,hasValidCsrf:async()=>false})).status,403);
   const res=await handleGmailAdminOAuth(post,s.env,s.ok);
+  assert.equal((await handleGmailAdminOAuth(post,s.env,{...s.ok,getAdminSession:async()=>null})).status,401);
   assert.equal(res.status,302);
   assert.match(res.headers.get('location'),/^https:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth\?/);
   assert.equal(res.headers.get('cache-control'),'no-store, private');
@@ -44,6 +45,11 @@ test('successful callback stores refresh token only on server and never sends it
    fetcher:async()=>({ok:true,async json(){return {token_type:'Bearer',access_token:'synthetic-access',
     refresh_token:'synthetic-refresh',scope:'https://www.googleapis.com/auth/gmail.send',expires_in:3600}}})
   });
+  const wrongSession=await handleGmailAdminOAuth(s.req('/oauth/gmail/callback?state='+state+'&code=synthetic-code'),s.env,{
+   ...s.ok,getAdminSession:async()=> 'other-admin-browser-session-987654321',saveRefreshToken:async()=>{throw Error('must not save')},
+   fetcher:async()=>{throw Error('must not exchange')}
+  });
+  assert.equal(wrongSession.status,503);
   assert.equal(result.status,200);
   assert.equal(stored.refreshToken,'synthetic-refresh');
   const body=await result.text();
