@@ -9,7 +9,7 @@ import {reserveLoginAttempt} from './resident-login-rate-limit.mjs';
 const generic=Object.freeze({ok:true,message:'If this address is authorized, a sign-in email will be sent.'});
 const invalid=Object.freeze({ok:false,message:'Please check the information and try again.'});
 const maxCaptchaLength=4096;
-export async function verifyTurnstile({token,secret,fetcher=fetch,remoteIp,requesterId,rateLimitSecret,now=Date.now()}){
+export async function verifyTurnstile({token,secret,fetcher=fetch,remoteIp}){
  if(typeof token!=='string'||token.length<1||token.length>maxCaptchaLength||typeof secret!=='string'||secret.length<12)
   return false;
  try{
@@ -24,7 +24,7 @@ export async function verifyTurnstile({token,secret,fetcher=fetch,remoteIp,reque
   return result?.success===true;
  }catch{return false}
 }
-export async function requestPrivateLogin({db,email,turnstileToken,secret,fetcher,sendLink,linkBase,remoteIp,now=Date.now()}){
+export async function requestPrivateLogin({db,email,turnstileToken,secret,fetcher,sendLink,linkBase,remoteIp,requesterId,rateLimitSecret,now=Date.now()}){
  // Callers MUST return the same generic reply for unlisted addresses. No raw
  // challenge is written to a public response, logs, or analytics.
  const valid=normalizeEmail(email);
