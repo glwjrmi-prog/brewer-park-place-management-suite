@@ -280,3 +280,65 @@ test('staging advisor failures do not write raw upstream error details to logs',
  assert.equal(JSON.stringify(observed).includes(privateMarker),false);
  assert.equal(observed.some(args=>args.includes('BPP_INTAKE_STAGING_ADVISOR_UNAVAILABLE')),true);
 });
+
+test('verified owner may supplement request; reviewed item returns to board without leaking old decision',async()=>{
+ const t=sandbox();
+ const x=await createEmailChallenge(t.database,'owner@example.com');
+ const y=await createEmailChallenge(t.database,'neighbor@example.com');
+ const owner=(await consumeEmailChallenge(t.database,x.privateToken)).privateSession;
+ const other=(await consumeEmailChallenge(t.database,y.privateToken)).privateSession;
+ const request=async(path,token,method='GET',body=null,key='supplement-submit')=>{
+  const headers={authorization:'Bearer '+token,origin:t.env.ALLOWED_STAGING_ORIGIN};
+  if(method==='POST'){headers['content-type']='application/json';headers['idempotency-key']=key}
+  const response=await worker.fetch(new Request('https://staging.test'+path,{method,headers,body:body===null?undefined:JSON.stringify(body)}),t.env);
+  return {status:response.status,body:await response.json()};
+ };
+ const initial=await request('/api/private/requests',owner,'POST',sample(), 'supplement-1');
+ assert.equal(initial.status,201);
+ const id=initial.body.id;
+ const path='/api/my-requests/'+id+'/updates';
+ const review={actor:'Board Demo',notes:'Board-only decision',version:1,responsibility:'association',priority:'routine',residentMessage:'Initial approved guidance'};
+ assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',review)).status,200);
+ const reviewed=await request('/api/my-requests',owner);
+ assert.equal(reviewed.body.requests[0].status,'reviewed');
+ assert.equal(reviewed.body.requests[0].version,2);
+ assert.equal((await request(path,other,'GET')).status,404);
+ assert.equal((await request(path,other,'POST',{version:2,details:'Attempt to modify neighbor'})).status,404);
+ assert.equal((await request(path,owner,'POST',{version:1,details:'Stale update'})).status,409);
+ assert.equal((await request(path,owner,'POST',{version:2,details:''})).status,422);
+ const updated=await request(path,owner,'POST',{version:2,details:'New photos available; please review siding again'});
+ assert.equal(updated.status,201);
+ assert.equal(updated.body.status,'pending_board_review');
+ assert.equal(updated.body.version,3);
+ const after=await request('/api/my-requests',owner);
+ assert.equal(after.body.requests[0].status,'pending_board_review');
+ assert.equal(after.body.requests[0].version,3);
+ assert.equal(Object.hasOwn(after.body.requests[0],'responsibility'),false);
+ assert.equal(Object.hasOwn(after.body.requests[0],'residentMessage'),false);
+ const own=await request(path,owner,'GET');
+ assert.equal(own.status,200);
+ assert.equal(own.body.updates.length,1);
+ assert.equal(own.body.updates[0].details,'New photos available; please review siding again');
+ assert.equal((await t.send('/api/requests/'+id+'/updates','resident')).status,403);
+ const board=await t.send('/api/requests/'+id+'/updates','board');
+ assert.equal(board.status,200);
+ assert.equal(board.body.updates.length,1);
+ assert.equal(t.count('intake_resident_updates'),1);
+ assert.equal(t.count('intake_events'),4);
+ assert.equal((await t.send('/api/requests/'+id+'/work-order-draft','board','POST',{version:3,actor:'Demo board'})).status,422);
+});
+
+test('reviewed request with existing draft refuses supplemental edits, preserving board work order draft',async()=>{
+ const t=sandbox();
+ const challenge=await createEmailChallenge(t.database,'owner@example.com');
+ const session=(await consumeEmailChallenge(t.database,challenge.privateToken)).privateSession;
+ const headers={authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN,'content-type':'application/json','idempotency-key':'draft-update-case'};
+ const first=await worker.fetch(new Request('https://staging.test/api/private/requests',{method:'POST',headers,body:JSON.stringify(sample())}),t.env);
+ const id=(await first.json()).id;
+ assert.equal((await t.send('/api/requests/'+id+'/review','board','POST',{version:1,actor:'Board',notes:'Approved',responsibility:'association',priority:'routine'})).status,200);
+ assert.equal((await t.send('/api/requests/'+id+'/work-order-draft','board','POST',{version:2,actor:'Board'})).status,201);
+ const update=await worker.fetch(new Request('https://staging.test/api/my-requests/'+id+'/updates',{method:'POST',headers,body:JSON.stringify({version:2,details:'Please change the request'})}),t.env);
+ assert.equal(update.status,409);
+ assert.equal(t.count('intake_resident_updates'),0);
+ assert.equal(t.count('staged_work_order_drafts'),1);
+});
