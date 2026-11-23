@@ -1,13 +1,5 @@
-// BPP MAINTENANCE: isolated private synthetic TEST ONLY; no real residents, no public website use.
-
-// Cloudflare dashboard one-file candidate; default-deny on all routes.
-
-// REQUIRED separate dedicated D1 INTAKE_DB; never bind to Suite databases.
-
-// Never commit or insert staging secrets here. Server-side test callers only.
-
-
-
+// BPP MAINTENANCE — ISOLATED STAGING CANDIDATE ONLY. Never use as resident production service.
+// Binds only to dedicated intake D1; no Suite data writes. Default disabled.
 // Private resident-access primitives for isolated staging only. NOT wired to public routes.
 // Caller must apply rate limits, send challenges via approved email provider,
 // and bind only authenticated email to request ownership. No email is sent here.
@@ -64,7 +56,6 @@ async function residentRequests(db,session,now=Date.now()){
  return (records.results||[]).map(r=>({id:r.id,unit:r.unit,area:r.area,category:r.category,description:r.description,escalation:!!r.escalation,status:r.status,version:r.version,createdAt:r.created_at,reviewedAt:r.reviewed_at, ...(['reviewed','scheduled','deferred','completed'].includes(r.status)?{responsibility:r.responsibility,residentMessage:r.resident_message}:{})}));
 }
 
-
 // BPP Policy Advisor integration for ISOLATED maintenance intake staging.
 // Based on current Suite policy-advisor-integration.js protocol: POST {question}, response {answer}.
 // NOT a source of verified law or governing citations; board must check original documents.
@@ -112,7 +103,6 @@ async function askAdvisor({area,category,fetcher=fetch,signal,timeoutMs=10000}){
  }
 }
 
-
 // BPP maintenance intake — ISOLATED STAGING CANDIDATE. NO production integration.
 // Bind INTAKE_DB to a NEW, dedicated D1 database; do not bind Suite v9 DB.
 // RESIDENT_STAGING_TOKEN and BOARD_STAGING_TOKEN are distinct temporary test credentials.
@@ -125,6 +115,34 @@ const priorities=new Set(['routine','high','emergency']);
 const lifecycleStatuses=new Set(['scheduled','deferred','completed']);
 const approvedResidentMessages={association:'The board reviewed your request and identified this as an association maintenance matter. The association will determine next steps.',owner:'The board reviewed your request and determined that the owner is responsible for this maintenance.',shared_or_disputed:'The board reviewed the request. Additional coordination may be needed to determine the applicable responsibilities.',requires_more_information:'The board reviewed your request and needs more information before determining responsibility.'};
 const encode=(body,status=200,headers={})=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff',...headers}});
+
+const MAX_POST_BODY_BYTES=8192;
+async function readBoundedJson(req){
+ const length=req.headers.get('content-length');
+ if(length!==null&&/^\\d+$/.test(length)&&Number(length)>MAX_POST_BODY_BYTES)
+  throw Object.assign(new Error('Request too large'),{code:'PAYLOAD_TOO_LARGE'});
+ if(!req.body)throw new SyntaxError('Missing JSON body');
+ const reader=req.body.getReader(),parts=[];let size=0;
+ try{
+  while(true){
+   const {done,value}=await reader.read();
+   if(done)break;
+   size+=value.byteLength;
+   if(size>MAX_POST_BODY_BYTES){
+    // Never buffer a potentially unlimited caller-controlled body.
+    reader.cancel().catch(()=>{});
+    throw Object.assign(new Error('Request too large'),{code:'PAYLOAD_TOO_LARGE'});
+   }
+   parts.push(value);
+  }
+ }finally{reader.releaseLock()}
+ const combined=new Uint8Array(size);let offset=0;
+ for(const part of parts){combined.set(part,offset);offset+=part.byteLength}
+ const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(combined));
+ if(!value||typeof value!=='object'||Array.isArray(value))throw new SyntaxError('JSON object required');
+ return value;
+}
+
 const str=(v,max)=>typeof v==='string'&&v.trim().length>0&&v.trim().length<=max?v.trim():null;
 function equal(a,b){if(!a||!b||a.length!==b.length)return false;let z=0;for(let i=0;i<a.length;i++)z|=a.charCodeAt(i)^b.charCodeAt(i);return z===0;}
 function roleOf(req,env){const h=req.headers.get('authorization')||'';if(!h.startsWith('Bearer '))return null;const token=h.slice(7);if(equal(token,env.BOARD_STAGING_TOKEN))return 'board';if(equal(token,env.RESIDENT_STAGING_TOKEN))return 'resident';return null;}
@@ -140,7 +158,7 @@ function stagingRecipients(env){
  return [...new Set(names)];
 }
 async function submit(req,env,headers,ownerEmail=null){
- let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  const key=req.headers.get('idempotency-key')||'';
  if(!validRequest(body,key))return encode({error:'Invalid fields or missing idempotency key'},422,headers);
  const exists=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation,submitter_email FROM intake_requests WHERE submission_key=?').bind(key).first();
@@ -179,7 +197,7 @@ async function residentUpdates(req,env,id,headers,ownerEmail){
   const found=await env.INTAKE_DB.prepare('SELECT id,details,created_at AS createdAt FROM intake_resident_updates WHERE request_id=? AND submitter_email=? ORDER BY id ASC LIMIT 100').bind(id,ownerEmail).all();
   return encode({ok:true,updates:found.results||[]},200,headers);
  }
- let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  if(!str(body?.details,2000)||!Number.isSafeInteger(body?.version)||body.version<1)return encode({error:'Update details and current request version required'},422,headers);
  if(!['pending_board_review','reviewed'].includes(request.status))return encode({error:'Board-controlled request stage; contact the Board with further information'},409,headers);
  if(request.version!==body.version)return encode({error:'Request changed: refresh before updating',code:'VERSION_CONFLICT'},409,headers);
@@ -206,7 +224,7 @@ async function list(env,headers){
  return encode({ok:true,requests:(result.results||[]).map(r=>({...safeRequest(r),reviewNotes:r.review_notes,boardActor:r.board_actor,provisionalAssessment:{responsibility:'not_assessed',reason:'Awaiting verified governing documents and board review',citations:[]}}))},200,headers);
 }
 async function acknowledgeUrgent(req,env,id,headers){
- let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  // The actor is a TEST-only label; existing BPP authenticated board identity must replace it.
  if(!Number.isInteger(body?.version)||!str(body?.actor,120))return encode({error:'Version and test board actor required'},422,headers);
  const row=await env.INTAKE_DB.prepare('SELECT id,version,escalation,urgent_ack_by,urgent_ack_at FROM intake_requests WHERE id=?').bind(id).first();
@@ -225,7 +243,7 @@ async function acknowledgeUrgent(req,env,id,headers){
 }
 async function createWorkOrderDraft(req,env,id,headers){
  // No Suite data is read or written. This is an isolated staging record only.
- let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  if(!Number.isInteger(body?.version)||!str(body?.actor,120))return encode({error:'Current version and staging board actor required'},422,headers);
  const r=await env.INTAKE_DB.prepare('SELECT id,status,responsibility,priority,version,unit,category,description,reviewed_at,board_actor FROM intake_requests WHERE id=?').bind(id).first();
  if(!r)return encode({error:'Request not found'},404,headers);
@@ -259,7 +277,7 @@ async function policyAdvice(req,env,id,headers){
   const record=await env.INTAKE_DB.prepare('SELECT answer,question,advisor_source AS source,requested_by AS requestedBy,requested_at AS requestedAt,request_version AS requestVersion FROM intake_policy_advice WHERE request_id=?').bind(id).first();
   return record?encode({ok:true,verified:false,boardOnly:true,advice:record},200,headers):encode({ok:true,verified:false,boardOnly:true,advice:null},200,headers);
  }
- let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  if(!Number.isInteger(body?.version)||!str(body?.actor,120))return encode({error:'Current version and board actor required'},422,headers);
  if(row.status!=='pending_board_review')return encode({error:'Policy lookup is available before board decision only'},409,headers);
  if(row.version!==body.version)return encode({error:'Request changed: refresh before lookup',code:'VERSION_CONFLICT'},409,headers);
@@ -283,7 +301,7 @@ async function policyAdvice(req,env,id,headers){
 }
 
 async function lifecycle(req,env,id,headers){
- let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  if(!lifecycleStatuses.has(body?.status)||!Number.isSafeInteger(body?.version)||body.version<1||!str(body?.actor,120)||!str(body?.notes,2000))
   return encode({error:'Valid status, version, board actor, and internal notes required'},422,headers);
  if(body.residentMessage!==undefined&&(typeof body.residentMessage!=='string'||!str(body.residentMessage,1000)))
@@ -304,7 +322,7 @@ async function lifecycle(req,env,id,headers){
 }
 
 async function review(req,env,id,headers){
- let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  if(!responsibilities.has(body?.responsibility)||!priorities.has(body?.priority)||!Number.isInteger(body?.version)||!str(body?.actor,120)||!str(body?.notes,2000))
   return encode({error:'Board review requires responsibility, priority, current version, reviewer, and notes'},422,headers);
  if(body?.residentMessage!==undefined&&(typeof body.residentMessage!=='string'||body.residentMessage.trim().length>1000))return encode({error:'Resident communication must be 1000 characters or fewer'},422,headers);
@@ -375,7 +393,6 @@ const intakeWorker = {async fetch(req,env){
  }catch(e){console.error('BPP_INTAKE_STAGING_REQUEST_FAILED');return encode({error:'Internal staging error'},500,headers)}
 }};
 
-
 // BPP isolated staging synthetic-test gate; not resident authentication.
 // No Zero Trust billing dependency. No actual residents or production credentials.
 // This module is not deployed, and never changes live Suite data.
@@ -395,7 +412,7 @@ async function equalToken(a,b){
  for(let i=0;i<32;i++)difference|=x[i]^y[i];
  return difference===0;
 }
-export async function permitPrivateStaging(req,env){
+async function permitPrivateStaging(req,env){
  if(env?.STAGING_INTAKE_ENABLED!=='true'||env?.STAGING_PRIVATE_TEST_ENABLED!=='true')
   return {ok:false,status:503};
  const secret=env?.STAGING_TEST_SECRET;
