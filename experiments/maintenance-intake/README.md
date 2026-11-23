@@ -257,3 +257,11 @@ Added `staging-api/private-test-gateway.mjs`, an alternative **synthetic integra
 **Critical boundaries:** This is a private developer integration test harness, **not sufficient authentication for an operational resident portal**. The secret must be supplied by server-side tools, never placed in publicly served JavaScript. No credential has been configured on Cloudflare, no Worker code has been deployed, and the existing read-only health Worker remains unchanged. Production still requires secure real resident authentication/verification, server-authorized Board identity/roles, CSRF and abuse controls, email delivery, and live acceptance tests.
 
 GitHub Actions isolated test run **45204533745** passed synthetic tests for default-off behavior, wrong/missing gate token, separate Board-role token, and no DB access on denial. No chargeable Cloudflare service or account change was introduced.
+
+## November 23, 2026 — one-file private synthetic-test bundle ready, still not deployed
+
+Prepared `staging-api/private-test-worker-dashboard.mjs` as a **single-file** dashboard copy/paste artifact combining the modular Worker, email-session primitives, and strict two-flag / 256-bit-secret staging gate. Its extra `X-BPP-Staging-Gate` header is distinct from each synthetic Board/resident `Authorization` header. It denies even `/health` unless `STAGING_INTAKE_ENABLED=true`, `STAGING_PRIVATE_TEST_ENABLED=true`, and a strong server-set `STAGING_TEST_SECRET` match. This avoids needing a Zero Trust subscription **for synthetic developer tests only**; it does not replace production resident/Board authentication.
+
+GitHub Actions run **45204862988** job **137797727762** passed packaged-versus-modular behavior tests for the default-off, missing flag, incorrect gate token, and valid private gate conditions.
+
+**No Cloudflare change** performed: the deployed `bpp-maintenance-intake-staging` Worker continues running only its read-only database health code. Do not copy a secret to public JavaScript or reuse a real Board PIN/password. Do not turn on request intake to real users until signed-in identity, email confirmations, rate-limits, Board authorization, and recovery are all implemented and verified.
