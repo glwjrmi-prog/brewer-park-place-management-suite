@@ -1,0 +1,22 @@
+name: Intake D1 Read-Only Live Health Verification
+on:
+  push:
+    branches:
+      - feature/maintenance-intake-prototype-2026-11-19
+    paths:
+      - 'experiments/maintenance-intake/staging-api/live-health-check.mjs'
+      - '.github/workflows/maintenance-intake-live-health.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Read-only D1 Worker health check, no resident data
+        run: node experiments/maintenance-intake/staging-api/live-health-check.mjs
