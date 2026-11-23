@@ -413,3 +413,37 @@ test('resident may read earlier supplements but cannot reopen scheduled, deferre
   assert.equal(t.count('intake_events'),3);
  }
 });
+
+test('staging POST rejects oversized streamed JSON before writing intake, and rejects non-object JSON',async()=>{
+ const t=sandbox();
+ const base='https://staging.test/api/requests',headers={
+  authorization:'Bearer resident-test-secret',origin:t.env.ALLOWED_STAGING_ORIGIN,
+  'content-type':'application/json','idempotency-key':'large-body-case'
+ };
+ const oversize=JSON.stringify({...sample(),description:'x'.repeat(9000)});
+ const huge=await worker.fetch(new Request(base,{method:'POST',headers,body:oversize}),t.env);
+ assert.equal(huge.status,413);
+ assert.equal(t.count('intake_requests'),0);
+ assert.equal(t.count('intake_events'),0);
+ const reported=await worker.fetch(new Request(base,{method:'POST',headers:{...headers,'content-length':'90000'},body:JSON.stringify(sample())}),t.env);
+ assert.equal(reported.status,413);
+ const wrongShape=await worker.fetch(new Request(base,{method:'POST',headers,body:'[]'}),t.env);
+ assert.equal(wrongShape.status,400);
+ const malformed=await worker.fetch(new Request(base,{method:'POST',headers,body:'{bad'}),t.env);
+ assert.equal(malformed.status,400);
+ const valid=await worker.fetch(new Request(base,{method:'POST',headers,body:JSON.stringify(sample())}),t.env);
+ assert.equal(valid.status,201);
+ assert.equal(t.count('intake_requests'),1);
+});
+test('large Board-review body fails closed and cannot change request or audit',async()=>{
+ const t=sandbox(),created=await t.send('/api/requests','resident','POST',sample(), 'review-size-case'),id=created.body.id;
+ const headers={authorization:'Bearer board-test-secret',origin:t.env.ALLOWED_STAGING_ORIGIN,'content-type':'application/json'};
+ const huge={actor:'Synthetic board',version:1,notes:'A'.repeat(11000),responsibility:'association',priority:'routine'};
+ const response=await worker.fetch(new Request('https://staging.test/api/requests/'+id+'/review',
+  {method:'POST',headers,body:JSON.stringify(huge)}),t.env);
+ assert.equal(response.status,413);
+ const record=t.db.prepare('SELECT status,version FROM intake_requests WHERE id=?').get(id);
+ assert.equal(record.status,'pending_board_review');
+ assert.equal(record.version,1);
+ assert.equal(t.count('intake_events'),1);
+});
