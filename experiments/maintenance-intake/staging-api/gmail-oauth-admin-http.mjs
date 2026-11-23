@@ -3,6 +3,7 @@
 // Caller supplies a real, verified BPP ADMIN session check (not a browser flag),
 // CSRF validation, Google client secrets, isolated D1, and an audited secure
 // refresh-token vault. No client credentials or tokens are returned to browsers.
+// Gmail-only authorization MUST NEVER require enabling resident intake.
 import {beginGmailAuthorization,finishGmailAuthorization} from './gmail-oauth.mjs';
 function reply(message,status=200,headers={}){
  return new Response(message,{status,headers:{'content-type':'text/plain; charset=utf-8',
@@ -10,7 +11,7 @@ function reply(message,status=200,headers={}){
   'referrer-policy':'no-referrer','x-frame-options':'DENY',...headers}});
 }
 function safeEnv(env){
- if(env?.STAGING_INTAKE_ENABLED!=='true'||env?.STAGING_GMAIL_OAUTH_ENABLED!=='true'||
+ if(env?.STAGING_INTAKE_ENABLED!=='false'||env?.STAGING_GMAIL_OAUTH_ENABLED!=='true'||
   !env?.INTAKE_DB||!env.GMAIL_CLIENT_ID||!env.GMAIL_CLIENT_SECRET||
   !env.GMAIL_REDIRECT_URI)throw new Error('Gmail OAuth staging disabled');
  return {db:env.INTAKE_DB,clientId:env.GMAIL_CLIENT_ID,clientSecret:env.GMAIL_CLIENT_SECRET,
