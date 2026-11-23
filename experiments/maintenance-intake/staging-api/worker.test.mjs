@@ -501,3 +501,61 @@ test('missing Board-approved registry fails private access closed rather than le
  assert.equal(r.status,503);
  assert.equal(t.count('intake_requests'),0);
 });
+
+test('unit revocation immediately before resident submit transaction prevents new records and urgent outbox',async()=>{
+ const t=sandbox();
+ t.db.exec(readFileSync(new URL('./verified-unit-registry.schema.sql',import.meta.url),'utf8'));
+ t.env.STAGING_VERIFIED_UNIT_ACCESS_ENABLED='true';
+ t.db.prepare("INSERT INTO intake_verified_unit_access(verified_email,unit_id,active,approved_by,approved_at) VALUES(?,?,1,?,?)")
+  .run('race@example.com','Sample Unit 12','synthetic-board','2026-11-23T00:00:00Z');
+ const challenge=await createEmailChallenge(t.database,'race@example.com');
+ const session=(await consumeEmailChallenge(t.database,challenge.privateToken)).privateSession;
+ t.env.STAGING_BOARD_RECIPIENT_KEYS=JSON.stringify(['test-board-a']);
+ const originalBatch=t.database.batch;
+ let changed=false;
+ t.database.batch=async stmts=>{
+  if(!changed){
+   changed=true;
+   t.db.prepare("UPDATE intake_verified_unit_access SET active=0,revoked_at=? WHERE verified_email=?")
+    .run('2026-11-23T00:01:00Z','race@example.com');
+  }
+  return originalBatch(stmts);
+ };
+ const r=await worker.fetch(new Request('https://staging.test/api/private/requests',{
+  method:'POST',headers:{authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN,'content-type':'application/json','idempotency-key':'race-revocation-submit'},
+  body:JSON.stringify(sample(true))
+ }),t.env);
+ assert.equal(r.status,403);
+ assert.equal(t.count('intake_requests'),0);
+ assert.equal(t.count('intake_events'),0);
+ assert.equal(t.count('urgent_alert_outbox'),0);
+});
+test('unit revocation at supplement transaction blocks data writes and leaves Board state intact',async()=>{
+ const t=sandbox();
+ t.db.exec(readFileSync(new URL('./verified-unit-registry.schema.sql',import.meta.url),'utf8'));
+ t.env.STAGING_VERIFIED_UNIT_ACCESS_ENABLED='true';
+ t.db.prepare("INSERT INTO intake_verified_unit_access(verified_email,unit_id,active,approved_by,approved_at) VALUES(?,?,1,?,?)")
+  .run('supplement@example.com','Sample Unit 12','synthetic-board','2026-11-23T00:00:00Z');
+ const challenge=await createEmailChallenge(t.database,'supplement@example.com');
+ const session=(await consumeEmailChallenge(t.database,challenge.privateToken)).privateSession;
+ const headers={authorization:'Bearer '+session,origin:t.env.ALLOWED_STAGING_ORIGIN,'content-type':'application/json','idempotency-key':'race-revocation-supplement'};
+ const create=await worker.fetch(new Request('https://staging.test/api/private/requests',{method:'POST',headers,body:JSON.stringify(sample())}),t.env);
+ const id=(await create.json()).id;assert.equal(create.status,201);
+ const originalBatch=t.database.batch;
+ let changed=false;
+ t.database.batch=async stmts=>{
+  if(!changed){
+   changed=true;
+   t.db.prepare("UPDATE intake_verified_unit_access SET active=0,revoked_at=? WHERE verified_email=?")
+    .run('2026-11-23T00:01:00Z','supplement@example.com');
+  }
+  return originalBatch(stmts);
+ };
+ const update=await worker.fetch(new Request('https://staging.test/api/my-requests/'+id+'/updates',{
+  method:'POST',headers,body:JSON.stringify({version:1,details:'This must not save after revocation'})
+ }),t.env);
+ assert.equal(update.status,409);
+ assert.equal(t.count('intake_resident_updates'),0);
+ assert.equal(t.count('intake_events'),1);
+ assert.deepEqual(t.db.prepare('SELECT status,version FROM intake_requests WHERE id=?').get(id),{status:'pending_board_review',version:1});
+});
