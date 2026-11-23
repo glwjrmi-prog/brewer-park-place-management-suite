@@ -327,3 +327,13 @@ Added `staging-api/resident-login-rate-limit.mjs` and isolated quota schema. Att
 GitHub Actions **45227148928** / job **137876595744** passed all isolated regressions, including the newly added login tests.
 
 **Release blockers unchanged:** these modules are intentionally *not wired to the live Worker* and its disabled-gate still blocks resident requests. Before integration, an authorized email delivery service and sender domain, verified Turnstile hostname/action, live Board-approved resident registry and revocation workflow, network-abuse controls, protected Board identity, and delivery/acceptance testing are required. No public or Suite code was changed, and no resident or email data was used.
+
+## November 23, 2026 — Board notification delivery adapter (source only)
+
+Added `staging-api/board-dispatch.schema.sql` and `board-dispatch.mjs` to move beyond merely planning urgent notifications. The **isolated staging adapter** persists one recipient-specific outbox entry for each currently active and verified Board email, deduplicates by incident and recipient, and makes a single atomic claim before calling an injected/mock email provider. It keeps unit number, request description, resident email, and the full Board recipient list out of notification payloads. It preserves the distinction between **provider accepted** and **Board acknowledged**, requiring separate Board action for acknowledgment.
+
+The adapter intentionally **never automatically retries** a claimed notification after a provider exception, rejection, or ambiguous result, because retrying without a real provider idempotency guarantee could send duplicates. An ambiguous or stuck claimed item needs authorized operational reconciliation before any retry. Changes to Board membership after initial queueing prevent a removed/unverified Board account from being dispatched. The test suite covers unique recipient queueing, single-claim concurrency, privacy, recipient revocation and provider ambiguity.
+
+All isolated CI tests passed in GitHub Actions **45257652462**, job **137983588714**.
+
+**Not connected to live email or endpoints**. No production email service, credentials, resident information or Suite data were used. Before release, an approved transactional email provider and sender domain, secure server-side Board directory, authenticated scheduled/queued dispatch, provider idempotency policy, delivery monitoring, on-call escalation policy, and complete acceptance tests are still needed. Do not publish staging credentials or enable the disabled staging Worker.
