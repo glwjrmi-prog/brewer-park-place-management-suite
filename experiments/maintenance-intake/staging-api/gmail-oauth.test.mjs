@@ -121,3 +121,35 @@ test('refresh requests Gmail access without exposing stored refresh token',async
  assert.equal(result.accessToken,'synthetic-new-access-token');
  assert.equal('refreshToken' in result,false);
 });
+
+test('a different BPP Workspace account cannot authorize the sender even with Gmail send-only access',async()=>{
+ const s=sandbox();try{
+  const auth=await beginGmailAuthorization({db:s.db,...settings,adminVerified:true,now:1000000});
+  const state=new URL(auth.authorizationUrl).searchParams.get('state');
+  let tokenChecks=0;
+  const fetcher=async(url)=>{
+   if(url==='https://oauth2.googleapis.com/tokeninfo'){
+    tokenChecks++;
+    return {ok:true,async json(){return {
+     iss:'https://accounts.google.com',aud:settings.clientId,
+     email:'building@bppcondos.org',email_verified:true,hd:'bppcondos.org',
+     nonce:s.sqlite.prepare('SELECT oidc_nonce FROM gmail_oauth_handshakes').get().oidc_nonce,
+     exp:Math.floor(Date.now()/1000)+3600
+    }}};
+   }
+   return {ok:true,async json(){return {
+    access_token:'synthetic-access-token',refresh_token:'synthetic-refresh-token',
+    token_type:'Bearer',expires_in:3600,id_token:'synthetic-id-token-12345678901234567890',
+    scope:[gmailSendOnlyScope,'openid','https://www.googleapis.com/auth/userinfo.email'].join(' ')
+   }}};
+  };
+  await assert.rejects(()=>finishGmailAuthorization({
+   db:s.db,...settings,adminVerified:true,state,code:'synthetic-code',fetcher,now:1000200
+  }),/WRONG_OR_UNVERIFIED_WORKSPACE_ACCOUNT/);
+  assert.equal(tokenChecks,1);
+  assert.equal(s.sqlite.prepare('SELECT consumed_at FROM gmail_oauth_handshakes').get().consumed_at,1000200);
+  await assert.rejects(()=>finishGmailAuthorization({
+   db:s.db,...settings,adminVerified:true,state,code:'synthetic-code',fetcher,now:1000300
+  }),/OAuth session expired or used/);
+ }finally{s.close()}
+});
