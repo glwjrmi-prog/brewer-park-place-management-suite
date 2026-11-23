@@ -265,3 +265,11 @@ Prepared `staging-api/private-test-worker-dashboard.mjs` as a **single-file** da
 GitHub Actions run **45204862988** job **137797727762** passed packaged-versus-modular behavior tests for the default-off, missing flag, incorrect gate token, and valid private gate conditions.
 
 **No Cloudflare change** performed: the deployed `bpp-maintenance-intake-staging` Worker continues running only its read-only database health code. Do not copy a secret to public JavaScript or reuse a real Board PIN/password. Do not turn on request intake to real users until signed-in identity, email confirmations, rate-limits, Board authorization, and recovery are all implemented and verified.
+
+## November 23, 2026 — test-only intake lifecycle and post-review ownership protections
+
+Further strengthened the unmerged staging prototype: verified resident owners may provide more information while a request is pending or just reviewed, but cannot silently reopen a **scheduled**, **deferred**, or **completed** matter that the Board already controls. The status guard is checked both before and during the database update transaction, with optimistic revision checks and no effect on existing work-order drafts. Both packaged dashboard versions were synchronized with this fix.
+
+The test-only, double-gated dashboard Worker now has an end-to-end **synthetic-only** regression that verifies an invalid private gate cannot create a record, the separate resident role can submit once with idempotent retries, residents cannot list the Board queue or approve responsibility, the Board staging role can review, and an audit trail records the review. No real identity, real emails, external service, or production data is involved. GitHub Actions **45205914021**, job **137801483668**, passed.
+
+The live staging Cloudflare Worker still runs the previously verified **read-only** D1 health probe; no database writes or resident submission routes have been deployed. Development remains in draft PR #3.
