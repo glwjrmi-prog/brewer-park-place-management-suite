@@ -16,7 +16,7 @@ const encode=(body,status=200,headers={})=>new Response(JSON.stringify(body),{st
 const MAX_POST_BODY_BYTES=8192;
 async function readBoundedJson(req){
  const length=req.headers.get('content-length');
- if(length!==null&&/^\\d+$/.test(length)&&Number(length)>MAX_POST_BODY_BYTES)
+ if(length!==null&&/^\d+$/.test(length)&&Number(length)>MAX_POST_BODY_BYTES)
   throw Object.assign(new Error('Request too large'),{code:'PAYLOAD_TOO_LARGE'});
  if(!req.body)throw new SyntaxError('Missing JSON body');
  const reader=req.body.getReader(),parts=[];let size=0;
