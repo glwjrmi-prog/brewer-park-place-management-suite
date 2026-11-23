@@ -1,5 +1,5 @@
-// BPP MAINTENANCE — ISOLATED STAGING CANDIDATE ONLY. Never use as resident production service.
-// Binds only to dedicated intake D1; no Suite data writes. Default disabled.
+// BPP MAINTENANCE ISOLATED STAGING ONLY. NOT FOR LIVE RESIDENT USE.
+// Must bind ONLY the separately provisioned intake staging D1.
 // Private resident-access primitives for isolated staging only. NOT wired to public routes.
 // Caller must apply rate limits, send challenges via approved email provider,
 // and bind only authenticated email to request ownership. No email is sent here.
@@ -103,6 +103,40 @@ async function askAdvisor({area,category,fetcher=fetch,signal,timeoutMs=10000}){
  }
 }
 
+// Staging ONLY: Board-approved unit access from a dedicated intake D1 table.
+// No production Suite or resident directory reads, no self-registered memberships.
+// A short-lived mailbox session proves mailbox control, not an active unit right.
+const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const unitPattern=/^[a-zA-Z0-9][a-zA-Z0-9 _./#-]{0,79}$/;
+class RegistryUnavailableError extends Error {
+ constructor(){super('Verified unit registry unavailable');this.name='RegistryUnavailableError'}
+}
+const emailOf=value=>typeof value==='string'&&value.length<=254&&emailPattern.test(value.trim().toLowerCase())?value.trim().toLowerCase():null;
+const unitOf=value=>typeof value==='string'&&value===value.trim()&&unitPattern.test(value)?value:null;
+async function activeUnitsForVerifiedEmail(db,email){
+ const normalized=emailOf(email);
+ if(!normalized||!db?.prepare)throw new RegistryUnavailableError();
+ let response;
+ try{
+  response=await db.prepare('SELECT unit_id AS unitId, approved_by AS approvedBy FROM intake_verified_unit_access WHERE verified_email=? AND active=1 AND approved_at IS NOT NULL AND approved_by IS NOT NULL AND revoked_at IS NULL ORDER BY unit_id ASC LIMIT 100').bind(normalized).all();
+ }catch{throw new RegistryUnavailableError()}
+ if(!response||!Array.isArray(response.results))throw new RegistryUnavailableError();
+ const unique=new Map();
+ for(const row of response.results){
+  if(!unitOf(row.unitId)||!/^[-_a-zA-Z0-9]{1,100}$/.test(String(row.approvedBy||'')))throw new RegistryUnavailableError();
+  const key=row.unitId.toLowerCase();
+  if(unique.has(key))throw new RegistryUnavailableError();
+  unique.set(key,row.unitId);
+ }
+ return Object.freeze([...unique.values()]);
+}
+async function authorizeUnitOrDeny(db,email,requestedUnit){
+ const requested=unitOf(requestedUnit);
+ if(!requested)return false;
+ const allowed=await activeUnitsForVerifiedEmail(db,email);
+ return allowed.some(unit=>unit.toLowerCase()===requested.toLowerCase());
+}
+
 // BPP maintenance intake — ISOLATED STAGING CANDIDATE. NO production integration.
 // Bind INTAKE_DB to a NEW, dedicated D1 database; do not bind Suite v9 DB.
 // RESIDENT_STAGING_TOKEN and BOARD_STAGING_TOKEN are distinct temporary test credentials.
@@ -157,10 +191,14 @@ function stagingRecipients(env){
  if(names.some(x=>typeof x!=='string'||!/^test-board-[a-z0-9-]{1,35}$/.test(x)))return null;
  return [...new Set(names)];
 }
-async function submit(req,env,headers,ownerEmail=null){
+async function submit(req,env,headers,ownerEmail=null,unitScoped=false){
  let body;try{body=await readBoundedJson(req)}catch(e){const tooLarge=e?.code==='PAYLOAD_TOO_LARGE';return encode({error:tooLarge?'Request body too large':'Invalid JSON'},tooLarge?413:400,headers)}
  const key=req.headers.get('idempotency-key')||'';
  if(!validRequest(body,key))return encode({error:'Invalid fields or missing idempotency key'},422,headers);
+ // A verified mailbox does not itself establish unit ownership. Check the
+ // Board-controlled registry BEFORE idempotency lookups or any intake writes.
+ if(unitScoped&&!await authorizeUnitOrDeny(env.INTAKE_DB,ownerEmail,body.unit))
+  return encode({error:'Unit not authorized'},403,headers);
  const exists=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation,submitter_email FROM intake_requests WHERE submission_key=?').bind(key).first();
  if(exists){
   const same=exists.submitter_email===ownerEmail&&exists.unit===body.unit.trim()&&exists.area===body.area&&exists.category===body.category&&exists.description===body.description.trim()&&!!exists.escalation===body.escalation;
@@ -190,9 +228,11 @@ async function submit(req,env,headers,ownerEmail=null){
 // Private supplemental information from the owner of this individual intake.
 // A reviewed request returns to pending review; earlier board determinations stay
 // only in the audit trail and are no longer exposed as current resident guidance.
-async function residentUpdates(req,env,id,headers,ownerEmail){
- const request=await env.INTAKE_DB.prepare('SELECT id,version,status FROM intake_requests WHERE id=? AND submitter_email=?').bind(id,ownerEmail).first();
+async function residentUpdates(req,env,id,headers,ownerEmail,unitScoped=false){
+ const request=await env.INTAKE_DB.prepare('SELECT id,unit,version,status FROM intake_requests WHERE id=? AND submitter_email=?').bind(id,ownerEmail).first();
  if(!request)return encode({error:'Request not found'},404,headers);
+ if(unitScoped&&!await authorizeUnitOrDeny(env.INTAKE_DB,ownerEmail,request.unit))
+  return encode({error:'Request not found'},404,headers);
  if(req.method==='GET'){
   const found=await env.INTAKE_DB.prepare('SELECT id,details,created_at AS createdAt FROM intake_resident_updates WHERE request_id=? AND submitter_email=? ORDER BY id ASC LIMIT 100').bind(id,ownerEmail).all();
   return encode({ok:true,updates:found.results||[]},200,headers);
@@ -353,22 +393,32 @@ const intakeWorker = {async fetch(req,env){
  // PRIVATE READ: only a separately verified, short-lived resident session may list requests.
  // Do not accept the shared staging resident token or a unit number as proof of identity.
  const privateUpdates=url.pathname.match(/^\/api\/my-requests\/(BPP-STG-[a-f0-9-]+)\/updates$/);
- if((url.pathname==='/api/my-requests'&&req.method==='GET')||(url.pathname==='/api/private/requests'&&req.method==='POST')||(privateUpdates&&(req.method==='GET'||req.method==='POST'))){
+ if((url.pathname==='/api/my-units'&&req.method==='GET')||(url.pathname==='/api/my-requests'&&req.method==='GET')||(url.pathname==='/api/private/requests'&&req.method==='POST')||(privateUpdates&&(req.method==='GET'||req.method==='POST'))){
   if(!env.INTAKE_DB)return encode({error:'Staging configuration incomplete'},503,headers);
   const h=req.headers.get('authorization')||'';
   if(!h.startsWith('Bearer '))return encode({error:'Unauthorized'},401,headers);
   try{
    const session=h.slice(7);
+   const scoped=env.STAGING_VERIFIED_UNIT_ACCESS_ENABLED==='true';
+   // The units endpoint always requires real Board-confirmed assignments.
+   if(url.pathname==='/api/my-units'){
+    const email=await authenticatedEmail(env.INTAKE_DB,session);
+    return email?encode({ok:true,units:await activeUnitsForVerifiedEmail(env.INTAKE_DB,email)},200,headers):encode({error:'Unauthorized'},401,headers);
+   }
    if(privateUpdates){
     const email=await authenticatedEmail(env.INTAKE_DB,session);
-    return email?residentUpdates(req,env,privateUpdates[1],headers,email):encode({error:'Unauthorized'},401,headers);
+    return email?residentUpdates(req,env,privateUpdates[1],headers,email,scoped):encode({error:'Unauthorized'},401,headers);
    }
    if(req.method==='POST'){
     const email=await authenticatedEmail(env.INTAKE_DB,session);
-    return email?submit(req,env,headers,email):encode({error:'Unauthorized'},401,headers);
+    return email?submit(req,env,headers,email,scoped):encode({error:'Unauthorized'},401,headers);
    }
    const records=await residentRequests(env.INTAKE_DB,session);
-   return records===null?encode({error:'Unauthorized'},401,headers):encode({ok:true,requests:records},200,headers);
+   if(records===null)return encode({error:'Unauthorized'},401,headers);
+   if(!scoped)return encode({ok:true,requests:records},200,headers);
+   const allowed=await activeUnitsForVerifiedEmail(env.INTAKE_DB,await authenticatedEmail(env.INTAKE_DB,session));
+   const permitted=new Set(allowed.map(u=>u.toLowerCase()));
+   return encode({ok:true,requests:records.filter(r=>permitted.has(r.unit.toLowerCase()))},200,headers);
   }catch(e){console.error('BPP_INTAKE_STAGING_PRIVATE_ACCESS_FAILED');return encode({error:'Private access unavailable'},503,headers)}
  }
  if(!env.INTAKE_DB||!env.BOARD_STAGING_TOKEN||!env.RESIDENT_STAGING_TOKEN||env.BOARD_STAGING_TOKEN===env.RESIDENT_STAGING_TOKEN)return encode({error:'Staging configuration incomplete'},503,headers);
@@ -428,6 +478,6 @@ export default {
   // A public website must NOT embed this secret in JavaScript.
   const auth=await permitPrivateStaging(req,env);
   if(!auth.ok)return deny(auth.status);
-  return intakeWorker.fetch(req,env);
+  return intakeWorker.fetch(req,env,ctx);
  }
 };
