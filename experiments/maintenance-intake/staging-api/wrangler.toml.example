@@ -7,6 +7,8 @@ binding = "INTAKE_DB"
 database_name = "bpp-maintenance-intake-isolated-staging"
 database_id = "76e65da9-470f-4cc3-947b-5cba829af583"
 [vars]
+# Keep disabled until the isolated D1 schema and private test credentials are verified.
+STAGING_INTAKE_ENABLED = "false"
 POLICY_ADVISOR_ENABLED = "false"
 # ALLOWED_STAGING_ORIGIN = "https://<private staging host>"
 # Secrets (never commit values): RESIDENT_STAGING_TOKEN, BOARD_STAGING_TOKEN
