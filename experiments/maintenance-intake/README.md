@@ -293,3 +293,11 @@ Added `staging-api/unit-authorization.mjs` as a deliberately separate authorizat
 All tests for cross-resident access, inactive Board approvals and spoofed unit identifiers passed in GitHub Actions run **45221880778**, job **137858021065**.
 
 **Not connected to live identity or D1**: a real Board-controlled resident/unit directory, identity lifecycle, unit-transfer/revocation procedure and consent verification still have to be implemented before this module can be used for production. No resident data, emails or Suite records were accessed or changed.
+
+## November 23, 2026 — dedicated verified resident-unit registry (not deployed)
+
+Created `staging-api/verified-unit-registry.schema.sql` defining an **isolated staging D1** table with one Board-controlled email/unit assignment, explicit active flag, Board approver and approval time, and optional revocation time. The companion `verified-unit-registry.mjs` provides read-only resolution of currently active, Board-approved assignments and explicit authorization checks, failing closed when the database or registry is missing. Revoking a previously active assignment immediately removes its unit from authorized reads in the synthetic tests.
+
+The in-memory SQLite test suite passed in GitHub Actions run **45222331120**, job **137859609786**, including email separation, inactive/revoked unit access, unknown email, invalid unit identifiers, missing database, and rejection of unapproved active rows.
+
+**Important release boundary:** The registry code is **not** wired into real resident routes and the new schema has **not** been applied to Cloudflare D1. A separately authenticated, audited Board approval/revocation flow and resident privacy checks on *all* reads/updates, not only submissions, are required before integration. No real resident directory or unit mappings were imported, no live DB was modified, and the draft PR remains unmerged.
