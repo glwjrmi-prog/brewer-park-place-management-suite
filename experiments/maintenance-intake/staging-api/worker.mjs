@@ -9,6 +9,7 @@ const allowedAreas=new Set(['Exterior of unit','Common area / grounds','Interior
 const allowedCategories=new Set(['Exterior trim / paint','Siding','Roof / gutters','Doors / windows','Landscaping / grounds','Drainage / water','Sidewalk / pavement','Other']);
 const responsibilities=new Set(['association','owner','shared_or_disputed','requires_more_information']);
 const priorities=new Set(['routine','high','emergency']);
+const lifecycleStatuses=new Set(['scheduled','deferred','completed']);
 const approvedResidentMessages={association:'The board reviewed your request and identified this as an association maintenance matter. The association will determine next steps.',owner:'The board reviewed your request and determined that the owner is responsible for this maintenance.',shared_or_disputed:'The board reviewed the request. Additional coordination may be needed to determine the applicable responsibilities.',requires_more_information:'The board reviewed your request and needs more information before determining responsibility.'};
 const encode=(body,status=200,headers={})=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff',...headers}});
 const str=(v,max)=>typeof v==='string'&&v.trim().length>0&&v.trim().length<=max?v.trim():null;
@@ -16,7 +17,7 @@ function equal(a,b){if(!a||!b||a.length!==b.length)return false;let z=0;for(let 
 function roleOf(req,env){const h=req.headers.get('authorization')||'';if(!h.startsWith('Bearer '))return null;const token=h.slice(7);if(equal(token,env.BOARD_STAGING_TOKEN))return 'board';if(equal(token,env.RESIDENT_STAGING_TOKEN))return 'resident';return null;}
 function cors(req,env){const origin=req.headers.get('origin');const allowed=String(env.ALLOWED_STAGING_ORIGIN||'');return origin&&origin===allowed?{'access-control-allow-origin':origin,'access-control-allow-headers':'authorization,content-type,idempotency-key','access-control-allow-methods':'GET,POST,OPTIONS','vary':'Origin'}:{};}
 function validRequest(body,key){return !!str(key,128)&&!!str(body?.unit,80)&&allowedAreas.has(body?.area)&&allowedCategories.has(body?.category)&&!!str(body?.description,2000)&&typeof body?.escalation==='boolean';}
-function safeRequest(r){return {id:r.id,unit:r.unit,area:r.area,category:r.category,description:r.description,escalation:!!r.escalation,status:r.status,createdAt:r.created_at,version:r.version,urgentAcknowledged:!!r.urgent_ack_at,urgentCoordinator:r.urgent_ack_by||null, ...(r.status==='reviewed'?{responsibility:r.responsibility,priority:r.priority,reviewedAt:r.reviewed_at}:{})};}
+function safeRequest(r){return {id:r.id,unit:r.unit,area:r.area,category:r.category,description:r.description,escalation:!!r.escalation,status:r.status,createdAt:r.created_at,version:r.version,urgentAcknowledged:!!r.urgent_ack_at,urgentCoordinator:r.urgent_ack_by||null, ...(['reviewed','scheduled','deferred','completed'].includes(r.status)?{responsibility:r.responsibility,priority:r.priority,reviewedAt:r.reviewed_at}:{})};}
 // A list of opaque sample board identities, never email addresses.
 // This staging candidate intentionally does not send messages.
 function stagingRecipients(env){
@@ -166,6 +167,28 @@ async function policyAdvice(req,env,id,headers){
  }catch(e){console.error('BPP_INTAKE_STAGING_ADVICE_SAVE_FAILED');return encode({error:'Could not save preliminary advice'},409,headers)}
  return encode({ok:true,boardOnly:true,verified:false,advice:{answer:advice.answer,question:advice.question,source:advice.source,requestedBy:actor,requestedAt:now},warning:'Preliminary unverified advice only. Board must inspect source documents before determining responsibility.'},201,headers);
 }
+
+async function lifecycle(req,env,id,headers){
+ let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
+ if(!lifecycleStatuses.has(body?.status)||!Number.isSafeInteger(body?.version)||body.version<1||!str(body?.actor,120)||!str(body?.notes,2000))
+  return encode({error:'Valid status, version, board actor, and internal notes required'},422,headers);
+ if(body.residentMessage!==undefined&&(typeof body.residentMessage!=='string'||!str(body.residentMessage,1000)))
+  return encode({error:'Resident message must be 1-1000 characters'},422,headers);
+ const existing=await env.INTAKE_DB.prepare('SELECT id,status,version,responsibility,resident_message FROM intake_requests WHERE id=?').bind(id).first();
+ if(!existing)return encode({error:'Request not found'},404,headers);
+ if(!['reviewed','scheduled','deferred'].includes(existing.status)||existing.version!==body.version)
+  return encode({error:'Lifecycle conflict: refresh and review state',code:'VERSION_CONFLICT'},409,headers);
+ if(body.status==='scheduled'&&existing.responsibility==='owner')
+  return encode({error:'Owner-only maintenance cannot be scheduled by HOA staging workflow'},422,headers);
+ const now=new Date().toISOString(),message=body.residentMessage?.trim()||existing.resident_message||'The Board has updated the status of your maintenance request.';
+ const result=await env.INTAKE_DB.batch([
+  env.INTAKE_DB.prepare("UPDATE intake_requests SET status=?,resident_message=?,version=version+1 WHERE id=? AND version=? AND status IN ('reviewed','scheduled','deferred')").bind(body.status,message,id,body.version),
+  env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'status_updated','board',?,?,? FROM intake_requests WHERE id=? AND version=? AND status=?").bind(body.actor.trim(),now,JSON.stringify({status:body.status,notes:body.notes.trim(),residentMessage:message}),id,body.version+1,body.status)
+ ]);
+ if(result.some(x=>Number(x?.meta?.changes||0)!==1))return encode({error:'Lifecycle conflict: refresh',code:'VERSION_CONFLICT'},409,headers);
+ return encode({ok:true,id,status:body.status,version:body.version+1,notice:'Staging status only. No vendor contact or dispatch performed.'},200,headers);
+}
+
 async function review(req,env,id,headers){
  let body;try{body=await req.json()}catch{return encode({error:'Invalid JSON'},400,headers)}
  if(!responsibilities.has(body?.responsibility)||!priorities.has(body?.priority)||!Number.isInteger(body?.version)||!str(body?.actor,120)||!str(body?.notes,2000))
@@ -229,6 +252,8 @@ export default {async fetch(req,env){
   if(draft&&req.method==='POST'&&role==='board')return createWorkOrderDraft(req,env,draft[1],headers);
   const ack=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/acknowledge$/);
   if(ack&&req.method==='POST'&&role==='board')return acknowledgeUrgent(req,env,ack[1],headers);
+  const statusRoute=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/status$/);
+  if(statusRoute&&req.method==='POST'&&role==='board')return lifecycle(req,env,statusRoute[1],headers);
   const m=url.pathname.match(/^\/api\/requests\/(BPP-STG-[a-f0-9-]+)\/review$/);
   if(m&&req.method==='POST'&&role==='board')return review(req,env,m[1],headers);
   return encode({error:'Forbidden or not found'},role==='resident'?403:404,headers);
