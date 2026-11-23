@@ -210,16 +210,23 @@ async function submit(req,env,headers,ownerEmail=null,unitScoped=false){
  if(recipients===null)return encode({error:'Urgent intake is unavailable: board alert configuration missing'},503,headers);
  try{
   const statements=[
-   env.INTAKE_DB.prepare('INSERT INTO intake_requests(id,submission_key,unit,area,category,description,escalation,status,created_at,submitter_email) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,key,body.unit.trim(),body.area,body.category,body.description.trim(),body.escalation?1:0,'pending_board_review',now,ownerEmail),
-   env.INTAKE_DB.prepare('INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) VALUES(?,?,?,?,?,?)').bind(id,'submitted','resident','staging resident',now,JSON.stringify({escalation:body.escalation}))
+   ...(unitScoped
+    ?[env.INTAKE_DB.prepare("INSERT INTO intake_requests(id,submission_key,unit,area,category,description,escalation,status,created_at,submitter_email) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM intake_verified_unit_access WHERE verified_email=? AND unit_id=? AND active=1 AND approved_by IS NOT NULL AND approved_at IS NOT NULL AND revoked_at IS NULL)").bind(id,key,body.unit.trim(),body.area,body.category,body.description.trim(),body.escalation?1:0,'pending_board_review',now,ownerEmail,ownerEmail,body.unit.trim())]
+    :[env.INTAKE_DB.prepare('INSERT INTO intake_requests(id,submission_key,unit,area,category,description,escalation,status,created_at,submitter_email) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,key,body.unit.trim(),body.area,body.category,body.description.trim(),body.escalation?1:0,'pending_board_review',now,ownerEmail)]),
+   env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'submitted','resident','staging resident',?,? FROM intake_requests WHERE id=?").bind(now,JSON.stringify({escalation:body.escalation}),id)
   ];
-  for(const recipient of recipients)statements.push(env.INTAKE_DB.prepare("INSERT INTO urgent_alert_outbox(request_id,recipient_key,status,created_at) VALUES(?,?,'simulation_pending',?)").bind(id,recipient,now));
+  for(const recipient of recipients)statements.push(env.INTAKE_DB.prepare("INSERT INTO urgent_alert_outbox(request_id,recipient_key,status,created_at) SELECT id,?,'simulation_pending',? FROM intake_requests WHERE id=?").bind(recipient,now,id));
   // All-or-nothing D1 batch: request, audit event, and simulated alert recipients.
-  await env.INTAKE_DB.batch(statements);
+  const result=await env.INTAKE_DB.batch(statements);
+  if(result.some(x=>Number(x?.meta?.changes||0)!==1))
+   return encode({error:unitScoped?'Unit not authorized':'Intake insert conflict'},unitScoped?403:409,headers);
  }catch(e){
   // Racing same-key submissions: return existing receipt, never make duplicate work orders.
   const row=await env.INTAKE_DB.prepare('SELECT id,unit,area,category,description,escalation,submitter_email FROM intake_requests WHERE submission_key=?').bind(key).first();
-  if(row){const same=row.submitter_email===ownerEmail&&row.unit===body.unit.trim()&&row.area===body.area&&row.category===body.category&&row.description===body.description.trim()&&!!row.escalation===body.escalation;return same?encode({ok:true,id:row.id,status:'pending_board_review',duplicate:true},200,headers):encode({error:'Idempotency key conflict'},409,headers)}
+  if(row){
+   if(unitScoped&&!await authorizeUnitOrDeny(env.INTAKE_DB,ownerEmail,body.unit))
+    return encode({error:'Unit not authorized'},403,headers);
+   const same=row.submitter_email===ownerEmail&&row.unit===body.unit.trim()&&row.area===body.area&&row.category===body.category&&row.description===body.description.trim()&&!!row.escalation===body.escalation;return same?encode({ok:true,id:row.id,status:'pending_board_review',duplicate:true},200,headers):encode({error:'Idempotency key conflict'},409,headers)}
   throw e;
  }
  return encode({ok:true,id,status:'pending_board_review',disclaimer:'Board review required. No responsibility decision has been made.'},201,headers);
@@ -247,7 +254,7 @@ async function residentUpdates(req,env,id,headers,ownerEmail,unitScoped=false){
  // Update + resident supplement + audit are atomic; the INSERT statements only
  // run when the owned request has actually moved to the requested next version.
  const result=await env.INTAKE_DB.batch([
-  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='pending_board_review',responsibility=NULL,priority=NULL,resident_message=NULL,review_notes=NULL,board_actor=NULL,reviewed_at=NULL,version=version+1 WHERE id=? AND submitter_email=? AND version=? AND status IN ('pending_board_review','reviewed') AND NOT EXISTS(SELECT 1 FROM staged_work_order_drafts WHERE intake_request_id=?)").bind(id,ownerEmail,body.version,id),
+  env.INTAKE_DB.prepare("UPDATE intake_requests SET status='pending_board_review',responsibility=NULL,priority=NULL,resident_message=NULL,review_notes=NULL,board_actor=NULL,reviewed_at=NULL,version=version+1 WHERE id=? AND submitter_email=? AND version=? AND status IN ('pending_board_review','reviewed') AND NOT EXISTS(SELECT 1 FROM staged_work_order_drafts WHERE intake_request_id=?)" + (unitScoped ? " AND EXISTS(SELECT 1 FROM intake_verified_unit_access WHERE verified_email=? AND unit_id=intake_requests.unit AND active=1 AND approved_by IS NOT NULL AND approved_at IS NOT NULL AND revoked_at IS NULL)" : "")).bind(...(unitScoped?[id,ownerEmail,body.version,id,ownerEmail]:[id,ownerEmail,body.version,id])),
   env.INTAKE_DB.prepare("INSERT INTO intake_resident_updates(request_id,submitter_email,details,created_at) SELECT id,submitter_email,?,? FROM intake_requests WHERE id=? AND submitter_email=? AND version=? AND status='pending_board_review'").bind(details,now,id,ownerEmail,body.version+1),
   env.INTAKE_DB.prepare("INSERT INTO intake_events(request_id,event_type,actor_role,actor_name,event_at,details_json) SELECT id,'resident_supplement','resident','verified email owner',?,? FROM intake_requests WHERE id=? AND submitter_email=? AND version=? AND status='pending_board_review'").bind(now,JSON.stringify({returnedToBoard:true}),id,ownerEmail,body.version+1)
  ]);
