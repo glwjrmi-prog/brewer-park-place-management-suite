@@ -27,14 +27,19 @@ function credentials({clientId,clientSecret,redirectUri}){
  return {clientId,clientSecret,redirectUri:url.href};
 }
 function validClock(now){if(!Number.isSafeInteger(now)||now<1)throw new Error('Invalid clock')}
-export async function beginGmailAuthorization({db,clientId,clientSecret,redirectUri,adminVerified=false,now=Date.now()}){
+async function adminHash(adminSession){
+ if(typeof adminSession!=='string'||adminSession.length<16||adminSession.length>4096)throw new Error('Invalid admin session');
+ return digest(adminSession);
+}
+export async function beginGmailAuthorization({db,clientId,clientSecret,redirectUri,adminVerified=false,adminSession,now=Date.now()}){
  if(adminVerified!==true||!db?.prepare)throw new Error('Admin session required');
  validClock(now);
  const c=credentials({clientId,clientSecret,redirectUri});
+ const boundAdmin=await adminHash(adminSession);
  const state=base64url(bytes(32)),verifier=base64url(bytes(32));
  const challenge=base64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));
- await db.prepare('INSERT INTO gmail_oauth_handshakes(state_hash,pkce_verifier,issued_at,expires_at) VALUES(?,?,?,?)')
-  .bind(await digest(state),verifier,now,now+TTL).run();
+ await db.prepare('INSERT INTO gmail_oauth_handshakes(state_hash,admin_session_hash,pkce_verifier,issued_at,expires_at) VALUES(?,?,?,?,?)')
+  .bind(await digest(state),boundAdmin,verifier,now,now+TTL).run();
  const url=new URL(AUTH);
  for(const [key,value] of Object.entries({
   client_id:c.clientId,redirect_uri:c.redirectUri,response_type:'code',scope:SCOPE,
@@ -44,7 +49,7 @@ export async function beginGmailAuthorization({db,clientId,clientSecret,redirect
  return {authorizationUrl:url.href,expiresAt:now+TTL};
 }
 export async function finishGmailAuthorization({
- db,clientId,clientSecret,redirectUri,state,code,adminVerified=false,
+ db,clientId,clientSecret,redirectUri,state,code,adminVerified=false,adminSession,
  fetcher=fetch,now=Date.now()
 }){
  if(adminVerified!==true||!db?.prepare)throw new Error('Admin session required');
@@ -53,17 +58,17 @@ export async function finishGmailAuthorization({
  if(typeof state!=='string'||! /^[a-zA-Z0-9_-]{43}$/.test(state)||
   typeof code!=='string'||code.length<4||code.length>2048||
   /[\r\n]/.test(code))throw new Error('Invalid OAuth callback');
- const stateHash=await digest(state);
+ const stateHash=await digest(state),boundAdmin=await adminHash(adminSession);
  // Guard token exchange with atomic state consumption. Concurrent callbacks
  // cannot both exchange the same code or reuse an old auth handshake.
  const row=await db.prepare(
-  'SELECT pkce_verifier FROM gmail_oauth_handshakes WHERE state_hash=? AND consumed_at IS NULL AND expires_at>?'
- ).bind(stateHash,now).first();
+  'SELECT pkce_verifier FROM gmail_oauth_handshakes WHERE state_hash=? AND admin_session_hash=? AND consumed_at IS NULL AND expires_at>?'
+ ).bind(stateHash,boundAdmin,now).first();
  if(!row||! /^[a-zA-Z0-9_-]{43}$/.test(String(row.pkce_verifier||'')))
   throw new Error('OAuth session expired or used');
  const claimed=await db.prepare(
-  'UPDATE gmail_oauth_handshakes SET consumed_at=? WHERE state_hash=? AND consumed_at IS NULL AND expires_at>?'
- ).bind(now,stateHash,now).run();
+  'UPDATE gmail_oauth_handshakes SET consumed_at=? WHERE state_hash=? AND admin_session_hash=? AND consumed_at IS NULL AND expires_at>?'
+ ).bind(now,stateHash,boundAdmin,now).run();
  if(Number(claimed?.meta?.changes||0)!==1)throw new Error('OAuth session expired or used');
  let response;
  try{
