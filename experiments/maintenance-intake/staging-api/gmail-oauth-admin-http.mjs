@@ -21,7 +21,7 @@ function originOf(req){
  return url.origin;
 }
 export async function handleGmailAdminOAuth(req,env,{
- isVerifiedAdmin,hasValidCsrf,saveRefreshToken,now=Date.now(),fetcher=fetch
+ isVerifiedAdmin,getAdminSession,hasValidCsrf,saveRefreshToken,now=Date.now(),fetcher=fetch
 }={}){
  // All auth checks must use real, server-validated per-person Board/admin
  // identities. Never trust a request header's stated role.
@@ -30,6 +30,10 @@ export async function handleGmailAdminOAuth(req,env,{
   originOf(req)!==expectedOrigin)return reply('Unavailable',404);
  if(typeof isVerifiedAdmin!=='function'||!await isVerifiedAdmin(req))
   return reply('Unauthorized',401);
+ // A second verified admin may not complete someone else's Gmail consent.
+ // Bind handshake to an opaque, server-verified admin session token.
+ const adminSession=typeof getAdminSession==='function'?await getAdminSession(req):null;
+ if(typeof adminSession!=='string'||adminSession.length<16)return reply('Unauthorized',401);
  let config;try{config=safeEnv(env)}catch{return reply('Unavailable',503)}
  const url=new URL(req.url);
  if(url.pathname==='/oauth/gmail/start'){
@@ -37,7 +41,7 @@ export async function handleGmailAdminOAuth(req,env,{
   if(req.headers.get('origin')!==expectedOrigin||typeof hasValidCsrf!=='function'||
    !await hasValidCsrf(req))return reply('Forbidden',403);
   try{
-   const flow=await beginGmailAuthorization({...config,adminVerified:true,now});
+   const flow=await beginGmailAuthorization({...config,adminVerified:true,adminSession,now});
    return reply('',302,{location:flow.authorizationUrl});
   }catch{return reply('Unable to start authorization',503)}
  }
@@ -50,7 +54,7 @@ export async function handleGmailAdminOAuth(req,env,{
   if(typeof saveRefreshToken!=='function')return reply('Secure token storage unavailable',503);
   try{
    const result=await finishGmailAuthorization({...config,adminVerified:true,
-    state,code,now,fetcher});
+    state,code,adminSession,now,fetcher});
    // A successful provider token exchange is not considered connected until
    // the confidential refresh token is securely saved on the server.
    await saveRefreshToken({refreshToken:result.refreshToken,
