@@ -213,3 +213,11 @@ A new *read-only* `staging-transfer.mjs` wraps the pure work-order adapter. It o
 `staging-transfer.test.mjs` uses synthetic Suite data to verify immutable original state, safe incrementing sequence, ownership/review gating, duplicate prevention, and source revision validation. GitHub CI job **137754190326** in workflow run **45192488825** completed successfully.
 
 **Not a release:** A real server-side transaction must fetch the latest authorized Suite state, reject revision conflicts, append the work order, create the intake-to-WO link, log the approved actor and audit record, and be tested for rollback/retry before connecting either production database. No such network/write integration is present.
+
+## 2026-11-23: Cloudflare Console paste workaround — not yet executed on D1
+
+User reported `No SQL statements detected` after pasting the original commented, multi-line setup script into the Cloudflare D1 dashboard Console. The Cloudflare console screenshot showed line comments flattened with SQL statements. A line comment beginning `--` can consume all following content when newlines are removed. The failed attempt does **not** establish schema deployment.
+
+Prepared `staging-api/bootstrap-console-paste.sql`: exactly one line, no comments, containing the same 18 SQL statements as the fresh staging bootstrap, including the owner-email column and all eight intake/auth tables. New SQLite regression test confirms the exact paste file initializes the fresh isolated schema. GitHub Actions job **137763087155**, run **45195033813**, passed.
+
+Only execute this prepared SQL on the user-created **bpp-maintenance-intake-isolated-staging** D1 (UUID `76e65da9-470f-4cc3-947b-5cba829af583`), and only if empty. Do not run on any Suite database. Request dashboard result, then verify with `/tables` or read-only `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;`. Avoid retries after partial execution until checking which tables exist, because the schema contains an `ALTER TABLE` step not fully idempotent. Keep production untouched.
