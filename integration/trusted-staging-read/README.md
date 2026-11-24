@@ -15,3 +15,6 @@ Read-only response has no resident email, tokens, private resident updates, or C
 Tests: `node integration/trusted-staging-read/staging-trusted-read.test.mjs`. Mock D1 only; Cloudflare D1 service-binding test still required.
 
 **Blocking:** verify real Board authenticated reviewer provenance; server-to-server trust; actual D1 transaction concurrency tests; code currentness and PIN hardening; real Board approval of production release.
+## Identity hardening update (2026-11-24)
+
+The lookup now requires a syntactically valid `verified_board_user_id` in addition to reviewed/Association status and a matching draft. It returns that user ID for source attribution and rejects historical self-reported-only approvals. This is a **candidate schema column**, not a deployed field; the candidate cannot function against staging D1 until its migration and an authenticated review-write path are implemented and tested. An offline CI workflow was added, but successful GitHub Actions execution has not been confirmed here.
