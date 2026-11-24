@@ -34,3 +34,13 @@ After comparing the generated candidate to the historical staging Worker, four i
 Files generated and syntax-checked locally: `BPP-Verified-Review-Staging-Worker-CANDIDATE-v2.js` and `BPP-Verified-Review-Staging-Worker-v2.test.cjs` (user-downloadable artifacts, not deployed). A local Node VM test invoked the **actual bundled review and draft functions** with mock service-binding auth and mocked D1: nine behavior scenarios passed, including a forged reviewer name, no actor field, rejected owner/shared drafts, missing PIN session, and unauthorized role. These are **mock tests only**, not D1 clone or live tests. No production or staging code deployed.
 
 Remaining cautions: current staging Worker source may differ from historical snapshot; migration must precede the v2 candidate; handling of urgent acknowledgement and other Board actions still uses self-reported actor names and requires a separate authorization hardening pass before real launch. The source is not ready for public use.
+
+## Candidate v4 — broader audit and SQLite verification
+
+Further inspection found that the earlier v2 review-only hardening left **urgent acknowledgements, lifecycle status updates, and policy-advice POSTs** trusting a caller-provided actor. Candidate v4 now requires a verified Management Suite PIN administrator session on those mutating routes and records the server-verified reviewer name. It also adds the PIN session header to CORS allowed headers and a duplicate-event guard for repeated Board-review audit inserts.
+
+**New finding from actually executing SQLite:** a repeated review could previously make the review UPDATE change zero rows while its dependent review-event INSERT still changed one row. Added a `NOT EXISTS` guard keyed on `request_id`, event type and review timestamp. New SQLite smoke test at `integration/verified-board-identity/SQLITE-REVIEW-TEST.py` passes: migration, review/actor provenance, replay rejection, stale revision and duplicate draft constraint. This is SQLite, **not Cloudflare D1**.
+
+The candidate v4 and local Node test are in user-facing conversation package `BPP-Verified-Review-Staging-v4-Review-Package.zip`; no Worker deployments were made. 14 local mock behavior/CORS checks passed, and `node --check` passed.
+
+**Release blocker still open:** compare against latest actual deployed staging code; verify full worker and database bindings, run a disposable D1 clone test including transaction rollback and concurrent reviewers, and review the production Worker warning on PIN legacy hardening. All imported work orders remain disabled.
