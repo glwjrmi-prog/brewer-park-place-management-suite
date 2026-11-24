@@ -25,7 +25,18 @@ else{
      'x-bpp-setup-intent':'gmail-send-only',authorization:'Bearer '+token},
     body:'{}',cache:'no-store'
    });
-   if(!session.ok)throw Error('BPP administrator verification was not approved.');
+   if(!session.ok){
+    let payload={};try{payload=await session.json()}catch{}
+    const messages={
+     AUTH_SERVICE_UNAVAILABLE:'The BPP authentication service could not be reached.',
+     ADMIN_REQUIRED:'Your verified account does not have administrator permission.',
+     INVALID_SESSION:'Your BPP sign-in session needs to be renewed.',
+     SESSION_NOT_VERIFIED:'The BPP authentication service did not accept this session.',
+     UNEXPECTED_AUTH_RESPONSE:'The BPP authentication response format was unexpected.'
+    };
+    const reason=typeof payload?.reason==='string'?payload.reason:'';
+    throw Error(messages[reason]||'BPP administrator verification was not approved (HTTP '+session.status+').');
+   }
    const context=await session.json();
    const start=await fetch('/oauth/gmail/start',{
     method:'POST',credentials:'same-origin',redirect:'error',
