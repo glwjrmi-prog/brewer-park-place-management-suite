@@ -21,3 +21,4 @@ jobs:
         with:
           node-version: '22'
       - run: node integration/verified-board-identity/verified-board-identity.test.mjs
+      - run: node integration/verified-board-identity/verified-review-handler.test.mjs
