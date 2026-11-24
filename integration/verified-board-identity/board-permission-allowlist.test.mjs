@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {authorizedReviewer} from './board-permission-allowlist.mjs';
+const user={id:'usr-123456789abc',role:'user'};
+assert.equal(authorizedReviewer(user,''),false);
+assert.equal(authorizedReviewer(user,user.id),true);
+assert.equal(authorizedReviewer(user,'usr-987654321abc'),false);
+assert.equal(authorizedReviewer({...user,role:'admin'},''),true);
+assert.equal(authorizedReviewer({...user,role:'resident'},user.id),false);
+assert.equal(authorizedReviewer(user,'*'),false);
+assert.equal(authorizedReviewer(user,user.id+',invalid'),false);
+assert.equal(authorizedReviewer({...user,id:'invalid'},user.id),false);
+console.log('PASS: explicit Board reviewer allowlist');
