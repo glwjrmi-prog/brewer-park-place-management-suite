@@ -21,3 +21,11 @@ Run offline tests with `node integration/verified-board-identity/verified-board-
 **Not yet deployed.** This is a *review handler candidate*, not a patched staging Worker. The current static-token review route still exists in the deployed staging Worker until a controlled replacement is performed. Do not enable live work-order imports based on the current staging approval record.
 
 Required prior to deployment: migrate the isolated D1 schema, verify existing review/notification code is preserved, route authentic Suite PIN sessions through a secure handoff, test against staging D1 (including simultaneous requests and batch rollback), keep an audited rollback version, and explicitly disable the legacy self-reported Board review route for any importable record. Non-admin Board members will need permission modeling before adoption.
+
+## v6 offline Board member permissions
+
+A new candidate, `BPP-Verified-Review-Staging-Worker-CANDIDATE-v6.js`, adds a server-side explicit comma-separated `BPP_MAINTENANCE_BOARD_USER_IDS` allowlist for Board accounts with the existing `user` role, while still permitting `admin` users. This removes the proposed requirement to promote every Board member to administrator. Missing/malformed allowlist entries fail closed. All Board operations still require a valid PIN session and the private staging gate.
+
+Six *routed* simulated permission tests passed locally, along with Node syntax validation; the earlier v5 and SQLite suites passed separately. The portable helper `board-permission-allowlist.mjs` and its tests are committed, and the offline CI workflow runs that helper's test. The full v6 Worker artifact exists as the conversation download `BPP-Verified-Board-Permissions-v6-OFFLINE.zip`.
+
+**Do not deploy from this package.** Need actual current staging code comparison, D1 clone migration tests, end-to-end browser PIN session handoff, Board permission approval, and production API import transaction tests. No Cloudflare changes were made.
