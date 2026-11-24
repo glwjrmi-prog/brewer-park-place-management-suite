@@ -13,3 +13,11 @@ Only `admin` is allowed in this conservative candidate. If other Board members s
 Blocking work: service-binding wiring, protected board-auth handoff, staging review transaction, D1 clone tests, actual deployed production security review, and separate Board confirmation plus atomic uniqueness for the final production import.
 
 Run offline tests with `node integration/verified-board-identity/verified-board-identity.test.mjs`.
+
+## Identity-bound review transaction candidate
+
+`verified-review-handler.mjs` now prepares the actual review UPDATE and matching audit INSERT using **only the authenticated PIN principal**, not the browser's `actor` or `residentMessage`. It requires `status='pending_board_review'`, expected request version, and writes `verified_board_user_id` alongside `board_actor`. The paired `verified-review-handler.test.mjs` uses a mock D1 batch and tests forged user-supplied identity, invalid requests, unauthorized reviewers, and revision conflicts. GitHub Actions workflow updated to run both suites.
+
+**Not yet deployed.** This is a *review handler candidate*, not a patched staging Worker. The current static-token review route still exists in the deployed staging Worker until a controlled replacement is performed. Do not enable live work-order imports based on the current staging approval record.
+
+Required prior to deployment: migrate the isolated D1 schema, verify existing review/notification code is preserved, route authentic Suite PIN sessions through a secure handoff, test against staging D1 (including simultaneous requests and batch rollback), keep an audited rollback version, and explicitly disable the legacy self-reported Board review route for any importable record. Non-admin Board members will need permission modeling before adoption.
