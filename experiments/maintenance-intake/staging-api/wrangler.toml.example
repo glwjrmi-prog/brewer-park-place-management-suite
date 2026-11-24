@@ -18,3 +18,9 @@ POLICY_ADVISOR_ENABLED = "false"
 # Changing this to "true" permits explicitly requested board-only, sanitized
 # area/category questions to existing BPP Policy Advisor. Never publish publicly
 # while shared board/resident test credentials are used.
+
+# Required only when deploying the Gmail-enabled Worker.
+# The service name is the existing BPP production authentication Worker.
+[[services]]
+binding = "BPP_SUITE_AUTH"
+service = "bpp-management-suite-production-api"
