@@ -59,7 +59,7 @@ test('unverified or non-admin Suite session never creates cookie or D1 entry',as
   assert.equal((await bootstrapGmailSetup(s.start(),s.env,{now:1000000,fetcher:async()=>({
    ok:true,status:200,async json(){return {user:{id:'someone',role:'user',active:true}}}
   })})).status,401);
-  assert.equal((await bootstrapGmailSetup(s.start(),s.env,{now:1000000,fetcher:async()=>{throw Error('down')}})).status,401);
+  assert.equal((await bootstrapGmailSetup(s.start(),s.env,{now:1000000,fetcher:async()=>{throw Error('down')}})).status,503);
   assert.equal(s.sqlite.prepare('SELECT count(*) AS n FROM gmail_setup_sessions').get().n,0);
  }finally{s.close()}
 });
