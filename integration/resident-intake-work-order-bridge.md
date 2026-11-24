@@ -95,3 +95,14 @@ Historical priority values are `Routine`, `High`, `Emergency`.
 The November 24 live UI screenshots visibly match all these labels and sections. However the historical source is **not authoritative evidence of the current production schema**; compare it with the current deployed UI source before a production write. The user uploaded a staging test with no real occupant data. A local read-only preview module and seven tests were prepared in `BPP-work-order-readonly-preview.zip` (conversation artifact); they never call APIs or mutate production.
 
 **Safety note:** Do not reuse the staged fictional `TEST-UNIT-002` as a live work order. The preview builder requires Board review, Association responsibility and a corresponding draft, and tags the source ID in the issue text for duplicate detection. This is an extra preview check, not the atomic server-side uniqueness protection required for production.
+
+## Current integration engineering checkpoint (2026-11-24)
+
+Prepared in GitHub:
+- `integration/work-order-import-core.js`: offline mapping, explicit Board-approval preview, strict intake/draft association, unique ID allocation, duplicate-source guard, in-memory revision checks. **No API, no database writes, no production mutation**.
+- `integration/work-order-import-core.test.js`: automated coverage of approved preview, duplicate import, owner-only rejection, stale revision, missing approval, source mismatch, and invalid fields.
+- `.github/workflows/work-order-import-offline-check.yml`: a scoped offline-only CI workflow; it has no deployment or production credentials.
+
+**Important:** The test workflow has been committed, but a successful run has not yet been independently confirmed in this conversation. The offline module is NOT a deployable production endpoint. Duplicate-source guards must be atomic server-side, and the deployed production API must be inspected before adapting the module.
+
+**Current staging configuration:** private intake and Board notifications were enabled for gated tests; the tested fixture remains fictional and must not be imported into production. Do not describe the private staging as a public resident launch.
