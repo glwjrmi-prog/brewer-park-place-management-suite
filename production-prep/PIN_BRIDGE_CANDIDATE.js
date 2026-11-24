@@ -408,6 +408,12 @@
       document.title='Brewer Park Place Management Suite — Protected Cloud';
       v9OverlayClose();
       v9StartPolling();
+      // Optional Gmail staging setup is exposed ONLY after server-verified PIN
+      // authentication and authoritative state membership have both succeeded.
+      // Gmail launcher independently revalidates the session on user click.
+      window.bppInstallGmailAdminSetupControl?.(
+        currentUser.role==='admin' && currentUser.active!==false
+      );
       // Replace the old client-side SHA-256 account forms with server-only
       // credential creation/reset. Do not preserve user-entered PIN in state.
       accessShowUserForm=function(){
