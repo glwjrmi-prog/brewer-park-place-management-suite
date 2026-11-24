@@ -52,7 +52,7 @@ export async function bootstrapGmailSetup(req,env,{fetcher=null,now=Date.now()}=
   // Non-secret staging diagnostics only. Never echo PIN bearer or user data.
   const reason=String(err?.code||'');
   if(reason==='AUTH_SERVICE_UNAVAILABLE')return reply({error:'Admin verification service unavailable',reason:'AUTH_SERVICE_UNAVAILABLE'},503);
-  if(reason==='ADMIN_REQUIRED')return reply({error:'Administrator role not approved',reason:'ADMIN_REQUIRED'},403);
+  if(reason==='ADMIN_REQUIRED')return reply({error:'Administrator role not approved',reason:'ADMIN_REQUIRED'},401);
   if(reason==='INVALID_SESSION')return reply({error:'Invalid or expired login session',reason:'INVALID_SESSION'},401);
   if(reason==='UNEXPECTED_AUTH_RESPONSE')return reply({error:'Unexpected administrator response',reason:'UNEXPECTED_AUTH_RESPONSE'},503);
   return reply({error:'Login session not verified',reason:'SESSION_NOT_VERIFIED'},401);
