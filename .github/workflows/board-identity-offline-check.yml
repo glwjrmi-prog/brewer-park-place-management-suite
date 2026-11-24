@@ -1,0 +1,23 @@
+name: BPP Board reviewer identity - offline tests ONLY
+on:
+  push:
+    paths:
+      - 'integration/verified-board-identity/**'
+      - '.github/workflows/board-identity-offline-check.yml'
+  pull_request:
+    paths:
+      - 'integration/verified-board-identity/**'
+      - '.github/workflows/board-identity-offline-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node integration/verified-board-identity/verified-board-identity.test.mjs
