@@ -31,7 +31,7 @@ function safeEnvelope(req,env){
   env.STAGING_INTAKE_ENABLED==='false'&&env.STAGING_GMAIL_OAUTH_ENABLED==='true'&&
   !!env.INTAKE_DB?.prepare;
 }
-export async function bootstrapGmailSetup(req,env,{fetcher=fetch,now=Date.now()}={}){
+export async function bootstrapGmailSetup(req,env,{fetcher=null,now=Date.now()}={}){
  if(!safeEnvelope(req,env))return reply({error:'Unavailable'},503);
  if(req.method!=='POST'||new URL(req.url).pathname!=='/oauth/gmail/session')
   return reply({error:'Not found'},404);
@@ -41,9 +41,22 @@ export async function bootstrapGmailSetup(req,env,{fetcher=fetch,now=Date.now()}
   return reply({error:'Forbidden'},403);
  const authorization=req.headers.get('authorization')||'';
  const bearer=authorization.startsWith('Bearer ')?authorization.slice(7):'';
+ // Authenticate using the same-account Cloudflare Service Binding only.
+ // An injected test fetcher is permitted in unit tests; no public-fetch fallback.
+ const verifyFetcher=fetcher || (typeof env?.BPP_SUITE_AUTH?.fetch==='function'
+  ?(url,options)=>env.BPP_SUITE_AUTH.fetch(new Request(url,options)):null);
+ if(!verifyFetcher)return reply({error:'Internal administrator verification unavailable'},503);
  let admin;
- try{admin=await verifySuiteAdminBearer({bearer,fetcher})}
- catch{return reply({error:'Unauthorized'},401)}
+ try{admin=await verifySuiteAdminBearer({bearer,fetcher:verifyFetcher})}
+ catch(err){
+  // Non-secret staging diagnostics only. Never echo PIN bearer or user data.
+  const reason=String(err?.code||'');
+  if(reason==='AUTH_SERVICE_UNAVAILABLE')return reply({error:'Admin verification service unavailable',reason:'AUTH_SERVICE_UNAVAILABLE'},503);
+  if(reason==='ADMIN_REQUIRED')return reply({error:'Administrator role not approved',reason:'ADMIN_REQUIRED'},401);
+  if(reason==='INVALID_SESSION')return reply({error:'Invalid or expired login session',reason:'INVALID_SESSION'},401);
+  if(reason==='UNEXPECTED_AUTH_RESPONSE')return reply({error:'Unexpected administrator response',reason:'UNEXPECTED_AUTH_RESPONSE'},503);
+  return reply({error:'Login session not verified',reason:'SESSION_NOT_VERIFIED'},401);
+ }
  if(!Number.isSafeInteger(now)||now<1)return reply({error:'Unavailable'},503);
  const session=token(),csrf=token();
  try{

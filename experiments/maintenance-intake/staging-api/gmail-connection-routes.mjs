@@ -7,7 +7,7 @@
 // No bearer, PIN, email data, secret or refresh token in any redirect URL.
 import {bootstrapGmailSetup,resolveGmailAdminSession,validateGmailSetupCsrf,revokeGmailSetup} from './gmail-setup-session.mjs';
 import {handleIsolatedGmailSetup} from './gmail-oauth-staging-adapter.mjs';
-export async function routeGmailConnection(req,env,{fetcher=fetch,now=Date.now()}={}){
+export async function routeGmailConnection(req,env,{fetcher=null,now=Date.now()}={}){
  let url;
  try{url=new URL(req.url)}catch{return new Response('Not found',{status:404})}
  if(url.pathname==='/oauth/gmail/session')
@@ -16,7 +16,7 @@ export async function routeGmailConnection(req,env,{fetcher=fetch,now=Date.now()
   return new Response('Not found',{status:404});
  const context=await resolveGmailAdminSession(req,env,{now});
  const result=await handleIsolatedGmailSetup(req,env,{
-  fetcher,now,returnAuthorizationJson:true,
+  fetcher:fetcher||fetch,now,returnAuthorizationJson:true,
   isVerifiedAdmin:async()=>!!context,
   getAdminSession:async()=>context?.session||null,
   hasValidCsrf:async()=>validateGmailSetupCsrf(req,env,{now})
