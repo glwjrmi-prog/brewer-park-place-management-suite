@@ -83,3 +83,15 @@ Visible UI form has sections: initial ID/location/priority/status; Schedule & As
 **Pre-launch caveats:** The form proves UI labels/defaults but not its internal JSON property names or production API field validation. The imported record must be built using the exact production schema before deployment. No fake resident fixture (`TEST-UNIT-002`) may be copied to production. The Board should confirm whether shared/disputed responsibility is eligible for a real work order or held until explicitly resolved.
 
 **Recommended rollout:** Implement a Board-side *preview and approve* import workflow rather than automatically generating live work orders at resident submission. Preserve existing revision checks and add server-side source-id idempotency. Preview must show all mapped fields and allow cancellation. Roll back with existing revision history if ever needed, not blind replacement of the full state.
+
+
+## Historical source-code schema confirmation (2026-11-24)
+
+A July 2026 v6.3.4 Work Order Detail HTML file in the user's file library defines `maintenance` records with exact keys:
+`id`, `status`, `dateOpened`, `dateClosed`, `location`, `priority`, `vendor`, `estimate`, `actual`, `category`, `documentFolderUrl`, `issue`, `notes`.
+Historical status values are `Open`, `Pending`, `In Progress`, `Waiting on Vendor`, `Waiting on Board`, `Closed`, `Cancelled`.
+Historical priority values are `Routine`, `High`, `Emergency`.
+
+The November 24 live UI screenshots visibly match all these labels and sections. However the historical source is **not authoritative evidence of the current production schema**; compare it with the current deployed UI source before a production write. The user uploaded a staging test with no real occupant data. A local read-only preview module and seven tests were prepared in `BPP-work-order-readonly-preview.zip` (conversation artifact); they never call APIs or mutate production.
+
+**Safety note:** Do not reuse the staged fictional `TEST-UNIT-002` as a live work order. The preview builder requires Board review, Association responsibility and a corresponding draft, and tags the source ID in the issue text for duplicate detection. This is an extra preview check, not the atomic server-side uniqueness protection required for production.
