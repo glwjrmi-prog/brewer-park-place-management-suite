@@ -38,7 +38,7 @@ test('non-admin denied even via internal service binding',async()=>{
   user:{id:'user-1',role:'user',active:true}
  }),{status:200})}};
  const response=await bootstrapGmailSetup(req(),e,{now:1000000});
- assert.equal(response.status,403);
+ assert.equal(response.status,401);
  assert.equal((await response.json()).reason,'ADMIN_REQUIRED');
 });
 
