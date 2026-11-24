@@ -22,3 +22,15 @@ Created a fully patched candidate file in the active conversation: `BPP-Verified
 - Disable public access to any deployment until separate resident-access validation, Board approval, production atomic import, and rollback strategy are complete.
 
 **Status:** source-level implementation candidate and documentation only. It is not confirmation that the feature works live.
+
+## Revision 2 correction and local behavioral tests (2026-11-24)
+
+After comparing the generated candidate to the historical staging Worker, four important gaps were found and corrected in the **v2 candidate**:
+- Review no longer requires a caller-provided `actor`, since identity comes from a verified PIN session.
+- Draft creator attribution now uses `verifiedReviewer.name`, not the forged `body.actor`.
+- Work-order draft creation now restricts responsibility to `association`; `shared_or_disputed` cannot silently create a live-import-eligible draft.
+- Resident supplements still clear the verified reviewer identity, invalidating an earlier Board decision.
+
+Files generated and syntax-checked locally: `BPP-Verified-Review-Staging-Worker-CANDIDATE-v2.js` and `BPP-Verified-Review-Staging-Worker-v2.test.cjs` (user-downloadable artifacts, not deployed). A local Node VM test invoked the **actual bundled review and draft functions** with mock service-binding auth and mocked D1: nine behavior scenarios passed, including a forged reviewer name, no actor field, rejected owner/shared drafts, missing PIN session, and unauthorized role. These are **mock tests only**, not D1 clone or live tests. No production or staging code deployed.
+
+Remaining cautions: current staging Worker source may differ from historical snapshot; migration must precede the v2 candidate; handling of urgent acknowledgement and other Board actions still uses self-reported actor names and requires a separate authorization hardening pass before real launch. The source is not ready for public use.
