@@ -1,0 +1,24 @@
+name: BPP Secure Import v2 - offline only
+on:
+  push:
+    paths:
+      - 'integration/secure-import-v2/**'
+      - '.github/workflows/secure-import-v2-offline-check.yml'
+  pull_request:
+    paths:
+      - 'integration/secure-import-v2/**'
+      - '.github/workflows/secure-import-v2-offline-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node integration/secure-import-v2/secure-import-v2.test.mjs
+      - run: python3 integration/secure-import-v2/sqlite-import-atomicity.test.py
