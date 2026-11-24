@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; connect-src https://bpp-management-suite-production-api.glwjrmi.workers.dev; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'"><title>BPP controlled Gmail test</title><style>body{font:16px system-ui,sans-serif;background:#f1f5f2;color:#173a29;padding:8vh 20px}main{max-width:580px;padding:26px;margin:auto;background:#fff;border:1px solid #d4dfd7;border-radius:14px}button{background:#173a29;color:white;padding:13px 18px;border:0;border-radius:8px;font:inherit}button:disabled{opacity:.5}p{line-height:1.5}</style></head>
+<body><main><h1>Brewer Park Place</h1><h2>Controlled Gmail delivery test</h2><p>This sends one staging test email from <strong>board@bppcondos.org</strong> to <strong>building@bppcondos.org</strong> per authorized test session. No resident submissions are enabled and no work orders are created.</p><button id="send">Send controlled test email</button><p id="status" role="status" aria-live="polite"></p></main>
+<script>
+(function(){'use strict';
+const HOME='https://glwjrmi-prog.github.io', PATH='/brewer-park-place-management-suite/', API='https://bpp-management-suite-production-api.glwjrmi.workers.dev',STAGING='https://bpp-maintenance-intake-staging.glwjrmi.workers.dev',KEY='BPPMS_V9_PRODUCTION_PIN_USER_SESSION';
+const btn=document.getElementById('send'),status=document.getElementById('status'); const say=s=>status.textContent=s;
+btn.addEventListener('click',async()=>{
+ if(location.origin!==HOME || !location.pathname.startsWith(PATH)){say('Open this page from the BPP Management Suite website.');return;}
+ const bearer=sessionStorage.getItem(KEY);
+ if(!bearer || !/^[a-zA-Z0-9._~-]{32,512}$/.test(bearer)){say('Please sign in as an administrator in this browser tab first.');return;}
+ const popup=window.open('about:blank','bppGmailTest','width=680,height=720'); if(!popup){say('Allow popups for this site.');return;}
+ btn.disabled=true; say('Verifying administrator access...');
+ try{
+  const res=await fetch(API+'/api/auth/me',{headers:{authorization:'Bearer '+bearer,accept:'application/json'},redirect:'error',credentials:'omit',cache:'no-store'});
+  if(!res.ok)throw Error('BPP session not valid.');
+  const data=await res.json(); if(typeof data?.user?.id!=='string'||data.user.role!=='admin'||data.user.active===false)throw Error('Administrator session required.');
+  let handed=false;
+  const onMessage=event=>{if(handed||event.origin!==STAGING||event.source!==popup||event.data?.type!=='BPP_GMAIL_SETUP_READY')return; handed=true;window.removeEventListener('message',onMessage);popup.postMessage({type:'BPP_GMAIL_TEST_HANDOFF',token:bearer},STAGING);say('Authorized. Review the test result in the separate window.');};
+  window.addEventListener('message',onMessage);popup.location.replace(STAGING+'/oauth/gmail/setup?mode=test');
+ }catch(e){try{popup.close()}catch{} say(e?.message||'Unable to start test.');}
+ finally{btn.disabled=false;}
+});
+})();
+</script></body></html>
