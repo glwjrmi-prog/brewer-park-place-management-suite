@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; connect-src https://bpp-management-suite-production-api.glwjrmi.workers.dev; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'">
+<title>BPP — Connect Board Gmail (Staging)</title>
+<style>
+ body{background:#f1f5f2;color:#173a29;font:16px system-ui,sans-serif;margin:0;padding:8vh 16px}
+ main{max-width:570px;margin:auto;background:#fff;border:1px solid #d4dfd7;border-radius:14px;padding:28px;box-shadow:0 8px 24px #173a2912}
+ h1{font-size:1.55rem;margin:0 0 14px}h2{font-size:1.1rem;margin:0 0 16px}
+ p{line-height:1.5}button{font:inherit;border:0;border-radius:8px;background:#173a29;color:#fff;padding:12px 20px;cursor:pointer}
+ button:disabled{opacity:.5;cursor:default}#status{min-height:2em}
+</style>
+</head>
+<body>
+<main>
+<h1>Brewer Park Place</h1>
+<h2>Connect Board Gmail — staging only</h2>
+<p>This administrator-only page starts Google authorization to send maintenance notifications from <strong>board@bppcondos.org</strong>. It will not send an email or enable resident submissions.</p>
+<p>Use this page in the <strong>same browser tab</strong> where you have signed in to the BPP Management Suite. Your PIN is never requested here.</p>
+<button id="connect" type="button">Connect Board Gmail</button>
+<p id="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+(function(){
+  'use strict';
+  const SUITE_ORIGIN='https://glwjrmi-prog.github.io';
+  const SUITE_PATH='/brewer-park-place-management-suite/';
+  const API='https://bpp-management-suite-production-api.glwjrmi.workers.dev';
+  const STAGING='https://bpp-maintenance-intake-staging.glwjrmi.workers.dev';
+  const SESSION_KEY='BPPMS_V9_PRODUCTION_PIN_USER_SESSION';
+  const button=document.getElementById('connect'),status=document.getElementById('status');
+  const say=s=>{status.textContent=s};
+  async function launch(){
+    if(location.origin!==SUITE_ORIGIN||!location.pathname.startsWith(SUITE_PATH)){
+      say('Unavailable outside the BPP Management Suite website.');return;
+    }
+    const bearer=sessionStorage.getItem(SESSION_KEY);
+    if(typeof bearer!=='string'||!/^[a-zA-Z0-9._~-]{32,512}$/.test(bearer)){
+      say('Please sign in to the BPP Management Suite first, then open this address in the same tab.');return;
+    }
+    // Open a blank popup synchronously on the real user click, prior to any fetch.
+    const popup=window.open('about:blank','bppGmailSetup','width=680,height=760');
+    if(!popup){say('Your browser blocked the authorization window. Allow popups for this site.');return}
+    button.disabled=true;
+    say('Verifying your administrator login…');
+    try{
+      const check=await fetch(API+'/api/auth/me',{
+        method:'GET',headers:{authorization:'Bearer '+bearer,accept:'application/json'},
+        cache:'no-store',redirect:'error',credentials:'omit'
+      });
+      if(!check.ok)throw new Error('Your Management Suite session is no longer valid.');
+      const data=await check.json();
+      if(typeof data?.user?.id!=='string'||data.user.role!=='admin'||data.user.active===false)
+        throw new Error('Only an authorized BPP administrator can connect Board Gmail.');
+      let delivered=false;
+      const handoff=event=>{
+        if(delivered||event.origin!==STAGING||event.source!==popup||
+          event.data?.type!=='BPP_GMAIL_SETUP_READY')return;
+        delivered=true;
+        window.removeEventListener('message',handoff);
+        popup.postMessage({type:'BPP_GMAIL_ADMIN_HANDOFF',token:bearer},STAGING);
+        say('Administrator verified. Complete Google authorization in the separate window.');
+      };
+      window.addEventListener('message',handoff);
+      popup.location.replace(STAGING+'/oauth/gmail/setup');
+      say('Opening secure Gmail authorization…');
+    }catch(e){
+      try{popup.close()}catch{}
+      say(e?.message||'Gmail authorization could not be opened.');
+    }finally{button.disabled=false}
+  }
+  button.addEventListener('click',launch);
+})();
+</script>
+</body>
+</html>
