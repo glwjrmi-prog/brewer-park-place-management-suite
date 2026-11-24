@@ -57,3 +57,29 @@ H. Vendor dispatch and public resident submissions remain off until independentl
 ## Deployment boundary
 
 Do not change `bpp-management-suite-production-api`, `STAGING_INTAKE_ENABLED`, or `STAGING_BOARD_NOTIFICATIONS_ENABLED` as a side-effect of this specification. Preserve current live work orders.
+
+
+## Verified live Work Order form field mapping (screenshots, 2026-11-24)
+
+| Live field | Proposed mapping / import behavior |
+|---|---|
+| Work Order ID | Allocated by live Suite using existing numbering policy; observed next suggested `WO-2026-086` at review time; NEVER hardcode it |
+| Location | Approved intake unit + optional precise area |
+| Priority | Board-reviewed priority (`routine` etc.), validated against the actual Suite dropdown |
+| Status | `Open` only after Board confirms a production import |
+| Date Opened | Import creation date in Suite's date format |
+| Date Closed | Empty |
+| Category | Intake category (`Roof / gutters` etc.), subject to production schema |
+| Vendor | Blank; no automatic dispatch |
+| Issue Description | Sanitized resident-provided description, plus intake request/draft references and explicit Board review provenance |
+| Estimate / Actual Cost | Empty; never infer or approve expenditure |
+| Variance | Suite-derived default, not explicitly imported |
+| Resolution / Completion Notes | Empty on creation; any provenance goes in issue description or dedicated metadata, not a false completion note |
+| Google Drive Folder Link | Blank unless a vetted authorized folder already exists for this request |
+| Document Index | Empty; use current Suite Drive picker or attach validated links after import, not arbitrary untrusted resident URLs |
+
+Visible UI form has sections: initial ID/location/priority/status; Schedule & Assignment; Issue; Cost; Resolution & Completion Notes; Documents & Photos. All sections are now accounted for; no further screenshot required.
+
+**Pre-launch caveats:** The form proves UI labels/defaults but not its internal JSON property names or production API field validation. The imported record must be built using the exact production schema before deployment. No fake resident fixture (`TEST-UNIT-002`) may be copied to production. The Board should confirm whether shared/disputed responsibility is eligible for a real work order or held until explicitly resolved.
+
+**Recommended rollout:** Implement a Board-side *preview and approve* import workflow rather than automatically generating live work orders at resident submission. Preserve existing revision checks and add server-side source-id idempotency. Preview must show all mapped fields and allow cancellation. Roll back with existing revision history if ever needed, not blind replacement of the full state.
