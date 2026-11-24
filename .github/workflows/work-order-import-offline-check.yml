@@ -1,0 +1,25 @@
+name: BPP work order import offline checks (NO DEPLOYMENT)
+on:
+  push:
+    paths:
+      - 'integration/work-order-import-core.js'
+      - 'integration/work-order-import-core.test.js'
+      - '.github/workflows/work-order-import-offline-check.yml'
+  pull_request:
+    paths:
+      - 'integration/work-order-import-core.js'
+      - 'integration/work-order-import-core.test.js'
+      - '.github/workflows/work-order-import-offline-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node integration/work-order-import-core.test.js
