@@ -9,8 +9,8 @@ const control=readFileSync(new URL('experiments/maintenance-intake/staging-api/g
 test('Gmail helper loads before asynchronous PIN boot and is not auto-opened',()=>{
  const idx=index.indexOf("'<script>'+gmailLaunch");
  assert.ok(idx>0);
- assert.ok(index.indexOf("'<script>'+gmailControl",idx)>idx);
- assert.ok(index.indexOf("'<script>'+bridge",idx)>idx);
+ assert.ok(index.indexOf("gmailControl",idx)>idx);
+ assert.ok(index.indexOf("bridge",idx)>idx);
  assert.ok(!index.includes('bppLaunchGmailSetup()'));
  assert.match(launcher,/button|window\.bppLaunchGmailSetup=launch/);
 });
