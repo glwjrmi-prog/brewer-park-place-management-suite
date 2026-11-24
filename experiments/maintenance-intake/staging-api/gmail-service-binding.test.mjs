@@ -38,5 +38,15 @@ test('non-admin denied even via internal service binding',async()=>{
   user:{id:'user-1',role:'user',active:true}
  }),{status:200})}};
  const response=await bootstrapGmailSetup(req(),e,{now:1000000});
+ assert.equal(response.status,403);
+ assert.equal((await response.json()).reason,'ADMIN_REQUIRED');
+});
+
+test('unexpected internal service response gets safe non-secret reason',async()=>{
+ const e=env();e.BPP_SUITE_AUTH={async fetch(){return new Response('bad gateway',{status:502})}};
+ const response=await bootstrapGmailSetup(req(),e,{now:1000000});
  assert.equal(response.status,401);
+ const body=await response.json();
+ assert.equal(body.reason,'SESSION_NOT_VERIFIED');
+ assert.ok(!JSON.stringify(body).includes(bearer));
 });
