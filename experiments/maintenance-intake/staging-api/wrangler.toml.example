@@ -1,0 +1,20 @@
+# DEDICATED STAGING ONLY — do not deploy until credentials and a new isolated D1 are configured.
+name = "bpp-maintenance-intake-isolated-staging"
+main = "worker.mjs"
+compatibility_date = "2026-11-19"
+[[d1_databases]]
+binding = "INTAKE_DB"
+database_name = "bpp-maintenance-intake-isolated-staging"
+database_id = "76e65da9-470f-4cc3-947b-5cba829af583"
+[vars]
+# Keep disabled until the isolated D1 schema and private test credentials are verified.
+STAGING_INTAKE_ENABLED = "false"
+POLICY_ADVISOR_ENABLED = "false"
+# ALLOWED_STAGING_ORIGIN = "https://<private staging host>"
+# Secrets (never commit values): RESIDENT_STAGING_TOKEN, BOARD_STAGING_TOKEN
+
+# Safe default: no outbound Policy Advisor calls until staging is privately configured.
+# Disabled by default above; a separate production security review is required.
+# Changing this to "true" permits explicitly requested board-only, sanitized
+# area/category questions to existing BPP Policy Advisor. Never publish publicly
+# while shared board/resident test credentials are used.

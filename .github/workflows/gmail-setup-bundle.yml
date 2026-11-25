@@ -1,0 +1,30 @@
+name: Build isolated Gmail setup dashboard bundle (NO DEPLOYMENT)
+on:
+  pull_request:
+    paths:
+      - 'experiments/maintenance-intake/staging-api/**'
+      - '.github/workflows/gmail-setup-bundle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Bundle isolated Gmail setup overlay — NEVER deploy
+        run: |
+          mkdir -p dist
+          npm exec --yes --package=esbuild@0.25.0 -- esbuild experiments/maintenance-intake/staging-api/gmail-setup-worker.mjs --bundle --platform=browser --format=esm --target=es2022 --outfile=dist/bpp-gmail-setup-isolated-staging.mjs --legal-comments=none
+          node --check dist/bpp-gmail-setup-isolated-staging.mjs
+          node -e "const fs=require('fs');const s=fs.readFileSync('dist/bpp-gmail-setup-isolated-staging.mjs','utf8');if(s.length<10000||/require\\(|from ['\"]\\./.test(s))process.exit(1);console.log('Isolated bundle built; no secrets, no Cloudflare deployment')"
+      - name: Save inspectable build artifact (not published)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bpp-gmail-setup-staging-bundle
+          path: dist/bpp-gmail-setup-isolated-staging.mjs
+          retention-days: 7
